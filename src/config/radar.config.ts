@@ -257,6 +257,11 @@ export const radarConfig = {
     earlyBaselineCap: 30,
     /** Unter diesem Niveau der letzten Wochen gilt das Signal als Rauschen → T = 0 */
     minRecentInterest: 5,
+    /**
+     * Rauschfilter: Enthalten die letzten `recentWeeks` Wochen eine Null, ist das Suchvolumen
+     * zu gering – Trends zeigt dann vereinzelte, auf 100 normierte Ausschläge → T = 0.
+     */
+    requireContinuousRecentInterest: true,
     /** Mindestlänge der Zeitreihe in Wochen */
     minSeriesWeeks: 16,
     weights: { growth: 0.55, early: 0.35, level: 0.1 },
