@@ -89,9 +89,10 @@ export const radarConfig = {
 
   /**
    * Wechselkurse: Einheiten der Währung pro 1 EUR.
-   * ANNAHME: feste Kurse Stand September 2026 (gerundet), regelmäßig manuell pflegen.
+   * ANNAHME: feste, gerundete Kurse (Stand September 2026) – regelmäßig manuell pflegen.
+   * USD nur als Sicherheitsnetz, falls eine Quelle nicht in EUR liefert.
    */
-  fx: { EUR: 1, CHF: 0.94, GBP: 0.86 } satisfies Record<Currency, number>,
+  fx: { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17 } as Record<string, number> & Record<Currency, number>,
 
   demand: {
     /**
@@ -121,49 +122,118 @@ export const radarConfig = {
 
   matching: {
     /** Paare darunter werden nicht gescort */
-    minRelevance: 0.5,
+    minRelevance: 0.6,
     /** Obergrenze Ausgabe-Tokens pro Claude-Request (Klassifikation von bis zu 8 Produkten) */
     maxOutputTokens: 4000,
-    /** Synonyme für die Heuristik (Keyword-Token → Titel-Token), DE ↔ EN */
+    /**
+     * Denktiefe für Claude (`output_config.effort`). Reine Klassifikation → "low".
+     * Auf null setzen, falls ANTHROPIC_MODEL ein Modell ohne Effort-Unterstützung ist (z. B. Haiku 4.5).
+     */
+    effort: "low" as "low" | "medium" | "high" | null,
+    /**
+     * Heuristik: Zubehör-/Ersatzteil-Erkennung → Relevanz halbiert, wenn der Begriff nicht im Keyword steht.
+     * `anywhere`: eindeutig, zählt überall im Titel. `leading`: zählt nur in der vorderen Titelhälfte
+     * (AliExpress-Titel nennen dort das eigentliche Produkt; „… Automatic Filter“ am Ende ist ein Merkmal).
+     */
+    accessoryMarkers: {
+      anywhere: ["replacement", "ersatz", "accessory", "zubehör"],
+      leading: ["cover", "filter", "battery", "bracket", "rolls", "tablets", "cartridge", "sticker", "poster", "trap", "canvas"],
+    },
+    /** Heuristik: Füllwörter, die beim Abgleich ignoriert werden */
+    stopwords: ["mit", "für", "und", "der", "die", "das", "for", "with", "and", "the"],
+    /**
+     * Heuristik: Wortbestandteil → Übersetzungen/Synonyme (DE → EN). Zusammengesetzte Wörter
+     * („wolkenlampe“) werden in bekannte Bestandteile zerlegt („wolken“ + „lampe“).
+     */
     synonyms: {
+      mini: ["mini", "pocket", "portable", "small"],
       lampe: ["lamp", "light", "licht", "leuchte"],
-      licht: ["light", "lamp", "lampe"],
-      nachtlicht: ["night", "light", "lamp"],
+      licht: ["light", "lamp"],
       sonnenuntergang: ["sunset"],
-      wolke: ["cloud"],
       wolken: ["cloud"],
+      wolke: ["cloud"],
       mond: ["moon"],
-      sternenhimmel: ["star", "galaxy", "projector"],
+      schwebend: ["floating", "levitating", "levitation"],
+      sternen: ["star", "galaxy", "starry"],
       projektor: ["projector"],
-      astronaut: ["astronaut"],
-      mini: ["mini", "small", "portable"],
-      tragbar: ["portable"],
-      waffeleisen: ["waffle", "maker"],
-      eisroller: ["ice", "roller"],
+      beamer: ["projector", "beamer"],
+      pilz: ["mushroom"],
+      waffeleisen: ["waffle"],
+      faltbar: ["foldable", "folding", "collapsible"],
+      tragbar: ["portable", "wearable"],
+      wasserkocher: ["kettle"],
+      mixer: ["blender", "mixer"],
+      isolier: ["insulated", "vacuum"],
+      becher: ["cup", "tumbler", "mug"],
+      strohhalm: ["straw"],
+      eisroller: ["ice roller"],
+      eis: ["ice"],
+      kugel: ["sphere", "ball", "round"],
+      form: ["mold", "mould", "tray"],
       gesicht: ["face", "facial"],
+      maske: ["mask"],
+      kopfhaut: ["scalp", "head"],
       massage: ["massage", "massager"],
       pistole: ["gun"],
-      halterung: ["holder", "mount", "stand"],
-      handy: ["phone"],
+      stein: ["stone", "quartz", "jade"],
       magnetisch: ["magnetic", "magsafe"],
-      powerbank: ["power", "bank"],
-      ventilator: ["fan"],
+      powerbank: ["power bank", "powerbank", "battery pack"],
       nacken: ["neck"],
-      wasserkocher: ["kettle"],
-      faltbar: ["foldable", "folding", "collapsible"],
-      mixer: ["blender"],
-      reinigung: ["cleaning", "cleaner"],
-      buerste: ["brush"],
-      bürste: ["brush"],
-      katze: ["cat"],
+      ventilator: ["fan"],
+      thermo: ["thermal", "inkless"],
+      drucker: ["printer"],
+      handy: ["phone"],
+      halterung: ["holder", "mount"],
+      auto: ["car", "vent", "dashboard"],
+      kette: ["chain", "lanyard", "strap", "necklace"],
+      schnecke: ["slug", "snail"],
+      katzen: ["cat", "pet"],
+      katze: ["cat", "pet"],
+      trinkbrunnen: ["fountain"],
+      pfoten: ["paw"],
+      reiniger: ["cleaner", "washer", "cleaning"],
       hund: ["dog"],
-      spielzeug: ["toy"],
-      tasche: ["bag"],
-      kerze: ["candle"],
-      aufbewahrung: ["storage", "organizer"],
-      schreibtisch: ["desk"],
-      tastatur: ["keyboard"],
-      flasche: ["bottle"],
+      wellig: ["wavy", "wave"],
+      spiegel: ["mirror"],
+      kerzen: ["candle"],
+      "wärmer": ["warmer"],
+      perlen: ["beaded", "bead", "pearl"],
+      tasche: ["bag", "handbag", "tote", "clutch"],
+      // Englische Keywords (UK): Varianten, unter denen AliExpress-Titel dasselbe Produkt führen
+      cat: ["cat", "pet", "kitten"],
+      lamp: ["lamp", "light"],
+      light: ["light", "lamp"],
+      led: ["led", "light", "photon"],
+      display: ["display", "frame", "matrix"],
+      blender: ["blender", "juicer"],
+      collapsible: ["collapsible", "foldable", "folding"],
+      travel: ["travel", "portable", "camping"],
+      electric: ["electric", "cordless", "rechargeable", "usb", "wireless"],
+      scalp: ["scalp", "head"],
+      massager: ["massager", "massage"],
+      roller: ["roller", "globe"],
+      face: ["face", "facial"],
+      tumbler: ["tumbler", "cup", "mug"],
+      insulated: ["insulated", "vacuum", "stainless"],
+      fountain: ["fountain", "dispenser"],
+      cleaner: ["cleaner", "washer", "cleaning", "plunger"],
+      thermal: ["thermal", "inkless", "label"],
+      projector: ["projector", "beamer"],
+      mount: ["mount", "holder"],
+      lanyard: ["lanyard", "strap", "chain", "necklace"],
+      crossbody: ["crossbody", "lanyard", "strap"],
+      mold: ["mold", "mould", "tray", "maker"],
+      sphere: ["sphere", "ball", "round"],
+      bag: ["bag", "handbag", "tote", "clutch"],
+      beaded: ["beaded", "bead", "pearl"],
+      stone: ["stone", "quartz", "jade", "board", "tool"],
+      power: ["power", "battery"],
+      bank: ["bank", "pack"],
+      magnetic: ["magnetic", "magsafe"],
+      galaxy: ["galaxy", "star", "nebula"],
+      astronaut: ["astronaut", "spaceman"],
+      art: ["art", "animation", "diy"],
+      levitating: ["levitating", "levitation", "floating", "magnetic"],
     } as Record<string, string[]>,
   },
 
