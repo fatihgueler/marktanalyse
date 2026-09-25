@@ -98,12 +98,13 @@ export class HeuristicJudge implements MatchJudge {
     if (missing.length > 0) reasonParts.push(`fehlt: ${missing.join(", ")}`);
     if (accessory) reasonParts.push(`vermutlich Zubehör („${accessory}“)`);
 
-    return {
-      externalId,
-      relevance,
-      category: this.categorize(`${normalizedKeyword} ${normalizedTitle}`),
-      reason: `${reasonParts.join("; ")}.`,
-    };
+    // Kategorie zuerst aus dem Keyword (inkl. Übersetzungen) – so bekommen alle Angebote eines
+    // Keywords dieselbe Kategorie; nur ohne Treffer entscheidet zusätzlich der Titel.
+    const keywordTerms = [normalizedKeyword, ...parts.flatMap((part) => synonyms[part] ?? [])].join(" ");
+    const keywordCategory = this.categorize(keywordTerms);
+    const category = keywordCategory !== "sonstiges" ? keywordCategory : this.categorize(`${normalizedKeyword} ${normalizedTitle}`);
+
+    return { externalId, relevance, category, reason: `${reasonParts.join("; ")}.` };
   }
 
   /** Kategorie mit den meisten Schlüsselwort-Treffern; ohne Treffer „sonstiges“. */

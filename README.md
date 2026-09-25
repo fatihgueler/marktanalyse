@@ -1,0 +1,147 @@
+# nexana Trend-Radar
+
+Internes Werkzeug zur **Früherkennung von Drop-Kandidaten**: sammelt regelmäßig Nachfrage-Signale aus DACH und UK, gleicht sie mit Einkaufsquellen in Asien ab und zeigt eine Rangliste mit Margenschätzung. Jeder Score lässt sich in der Detailansicht bis auf die Rohdaten zurückverfolgen.
+
+```
+Google Trends (DE/AT/CH/GB) ──► AliExpress ──► Google Shopping ──► Claude-Matching ──► Scoring ──► PostgreSQL ──► Dashboard
+   steigende Keywords          Angebote       Referenzpreis       Relevanz+Kategorie   (reine Funktionen)   Snapshot je Lauf
+```
+
+**Ohne einen einzigen API-Key vollständig lauffähig:** Fehlt ein Key, läuft die jeweilige Quelle automatisch mit realistischen Demo-Daten. Das Dashboard kennzeichnet Demo-Daten deutlich.
+
+## Stack
+
+Next.js 15 (App Router) · TypeScript strict · Tailwind CSS 4 · shadcn/ui · PostgreSQL + Prisma 7 · Anthropic SDK · Vitest · Deployment auf Railway
+
+## Schnellstart (lokal, Demo-Modus)
+
+Voraussetzungen: Node.js ≥ 20.19 und eine PostgreSQL-Datenbank (≥ 14).
+
+```bash
+# 1. Abhängigkeiten (generiert auch den Prisma Client)
+npm install
+
+# 2. Umgebungsvariablen
+cp .env.example .env
+#    In .env mindestens setzen:
+#      DATABASE_URL        z. B. postgresql://postgres:postgres@localhost:5432/trend_radar
+#      DASHBOARD_PASSWORD  beliebiges Passwort
+#      SESSION_SECRET      z. B. Ausgabe von: openssl rand -hex 32
+
+# 3. Datenbank-Schema anlegen
+npm run db:migrate
+
+# 4. Einen Datenlauf starten (Demo-Daten, ~3 Sekunden)
+npm run collect
+
+# 5. Dashboard starten → http://localhost:3000
+npm run dev
+```
+
+Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
+`docker run -d --name trend-radar-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=trend_radar -p 5432:5432 postgres:16`
+
+## Befehle
+
+| Befehl | Zweck |
+|---|---|
+| `npm run dev` | Dashboard im Entwicklungsmodus |
+| `npm run build` / `npm run start` | Production-Build / -Server |
+| `npm run collect` | Ein kompletter Datenlauf (Snapshot). Mit echten Keys: `npm run collect -- --live` |
+| `npm test` | Unit-Tests (Scoring, Marge, Wettbewerb, Matching, Signatur) |
+| `npm run db:migrate` | Migrationen lokal anwenden/erstellen |
+| `npm run db:deploy` | Migrationen in Produktion anwenden |
+| `npm run lint` | ESLint |
+
+## Umgebungsvariablen
+
+| Variable | Pflicht | Beschreibung |
+|---|---|---|
+| `DATABASE_URL` | ja | PostgreSQL-Verbindung |
+| `DASHBOARD_PASSWORD` | ja | Passwort für das Dashboard |
+| `SESSION_SECRET` | ja | Signiert das Login-Cookie, mindestens 32 Zeichen. Wer es ändert, meldet alle ab. |
+| `SERPAPI_API_KEY` | nein | [SerpApi](https://serpapi.com) für Google Trends **und** Google Shopping. Leer → beide im Demo-Modus. |
+| `ALIEXPRESS_APP_KEY` | nein | [AliExpress Open Platform](https://openservice.aliexpress.com), App Key |
+| `ALIEXPRESS_APP_SECRET` | nein | App Secret |
+| `ALIEXPRESS_TRACKING_ID` | nein | Affiliate-Tracking-ID. Alle drei AliExpress-Werte nötig, sonst Demo-Modus. |
+| `ANTHROPIC_API_KEY` | nein | Claude für das Matching. Leer → heuristisches Matching. |
+| `ANTHROPIC_MODEL` | nein | Modell für das Matching, Standard `claude-opus-5`. Günstiger: `claude-sonnet-5`. |
+
+Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
+
+## Von Demo-Daten auf echte APIs umstellen
+
+Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also schrittweise vorgehen, z. B. erst nur Google Trends live.
+
+1. **Google Trends + Google Shopping:** Account bei SerpApi anlegen, `SERPAPI_API_KEY` setzen. Genutzt werden `engine=google_trends` (steigende verwandte Suchanfragen und 12-Monats-Zeitreihe je Keyword) und `engine=google_shopping` (Median der Endkundenpreise).
+2. **AliExpress:** Auf der AliExpress Open Platform eine App mit Zugriff auf die **Affiliate API** anlegen (Methode `aliexpress.affiliate.product.query`), dann `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` und `ALIEXPRESS_TRACKING_ID` setzen.
+3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Wer ein Modell ohne Effort-Unterstützung nutzt (z. B. Haiku 4.5), setzt in der Config `matching.effort` auf `null`.
+4. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
+
+   ```
+   Kostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):
+     • SerpApi Google Trends: bis zu 132 Suchen
+     • SerpApi Google Shopping: bis zu 100 Suchen
+   Abbruch: Mindestens eine Quelle läuft live. Zum Bestätigen mit `npm run collect -- --live` starten.
+   ```
+
+   Erst `npm run collect -- --live` ruft die APIs tatsächlich auf. Die Mengen steuern `demand.maxSeedsPerCountry` und `demand.maxKeywordsPerCountry` in der Config.
+5. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
+
+Hinweis zur Live-Anbindung: Die Adapter für SerpApi und AliExpress sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet**. Beim ersten Live-Lauf lohnt ein Blick in die Fehlerliste des Laufs (Ausgabe von `collect` und `Run.errors`).
+
+## Zentrale Config: `src/config/radar.config.ts`
+
+**Alle** Gewichte, Steuersätze, Zoll- und Versandannahmen, Wechselkurse, Seeds und Limits stehen in dieser Datei, nirgends sonst im Code. Jede Änderung ändert die `configVersion`, die mit jedem Lauf gespeichert wird. So bleibt nachvollziehbar, mit welchen Annahmen ein alter Score entstanden ist. Die Config wird vor jedem Lauf geprüft (z. B. ob sich Gewichte zu 1 summieren).
+
+Wichtige Stellschrauben:
+
+- `tax.vatMode`: `"kleinunternehmer"` (Standard) oder `"regelbesteuert"`. Beim Wechsel in die Regelbesteuerung wird die Einfuhrumsatzsteuer als Vorsteuer abgezogen und die USt aus dem Verkaufspreis herausgerechnet.
+- `score.weights`, `trend.weights`, `competition.weights`: Gewichtung der Komponenten
+- `margin.*`: Mindest- und Zielmarge, Mindest-Rohertrag je Stück
+- `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden
+- `customs`, `tax.countries`, `shipping`, `fees`, `fx`: Zoll, Steuern, Versand, Gebühren, Kurse
+
+## So entsteht der Score
+
+Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch Tests abgedeckt.
+
+- **Trend-Dynamik T (0–1):** vergleicht die letzten 4 Wochen mit den 4 Wochen davor. Das Wachstum geht sättigend ein (Verdopplung ≈ 0,5). Wenig Vorgeschichte im restlichen Jahr ergibt einen **Frühphasen-Bonus**, aber nur bei steigendem Interesse. Das absolute Niveau zählt bewusst wenig. Lückenhafte Reihen mit Nullwerten in den letzten Wochen gelten als Rauschen (T = 0). Jedes Keyword wird nur mit sich selbst verglichen, weil Google-Trends-Werte je Abfrage normiert sind.
+- **Marge M (0–1):** Landed Cost = Einkauf + Versand + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land. Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
+- **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus der Trefferzahl auf AliExpress (Anbieter-Proxy) und dem Bestellvolumen der Top-Treffer.
+- **Gesamtscore:** `100 × Relevanz × (0,50·T + 0,35·M + 0,15·W)`. Kandidaten unter dem Mindest-Rohertrag werden gespeichert, aber markiert und ans Ende sortiert.
+
+## Dashboard
+
+- `/`: Rangliste des letzten erfolgreichen Laufs mit Filtern für Land und Kategorie sowie wählbarer Sortierung. Die Filter stehen in der URL und lassen sich teilen. Der Score-Balken jeder Zeile ist in Trend, Marge und Wettbewerb zerlegt (Tooltip mit Punkten).
+- `/produkt/[id]`: Detailansicht mit einer Kurzfassung in Klartext, der Aufschlüsselung aller Teil-Scores samt Zwischenwerten, der 52-Wochen-Trendkurve (Vergleichsfenster markiert), der Kalkulation (Landed Cost und Marge), dem Score-Verlauf über alle Läufe und den Zeitstempeln der Rohdaten.
+- Einfacher Passwortschutz über `DASHBOARD_PASSWORD`, sonst keine Nutzerverwaltung.
+
+## Deployment auf Railway
+
+1. Neues Projekt aus dem Repository anlegen und das **PostgreSQL**-Plugin hinzufügen.
+2. **Service „web“:** Build `npm run build`, Start `npm run start`, Pre-Deploy-Command `npm run db:deploy`. Variablen: `DATABASE_URL` (Referenz auf das Plugin), `DASHBOARD_PASSWORD`, `SESSION_SECRET`.
+3. **Service „collect“** (gleiches Repository): Start-Command `npm run collect -- --live`, Cron-Schedule z. B. `0 5 * * 1` (montags 05:00 UTC, dann sind die Google-Trends-Wochenwerte der Vorwoche vollständig). Variablen: `DATABASE_URL` sowie die API-Keys. Der Exit-Code ist ≠ 0, wenn der Lauf fehlschlägt.
+
+## Projektstruktur
+
+```
+src/
+├── config/        radar.config.ts (alle Annahmen), Validierung + Config-Version
+├── sources/       Adapter-Interfaces, Registry, Google Trends, AliExpress, Google Shopping, Mock-Katalog
+├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik
+├── scoring/       trend, margin, competition, score (+ Tests)
+├── jobs/          collect.ts
+├── lib/           db, env, auth, Formatierung, Queries
+├── components/    Dashboard-Komponenten (+ shadcn/ui unter ui/)
+└── app/           Seiten: / (Rangliste), /produkt/[id], /login
+prisma/            schema.prisma, Migrationen
+```
+
+Eine neue Quelle (Phase 2) implementiert `TrendSource`, `SupplySource` oder `PriceSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen. Collect-Job und Dashboard bleiben unverändert.
+
+## Bekannte Punkte
+
+- `npm audit` meldet Schwachstellen im **PostCSS, das Next.js 15 mitbringt** (nur zur Build-Zeit genutzt). Behoben ist das erst in Next 16; der Stack ist auf Next 15 festgelegt.
+- Bewusst **keine `loading.tsx` auf Root-Ebene**: Damit blieben in Next 15.5 (Production) Filter-Navigationen hängen, die auf derselben Seite nur URL-Parameter ändern. Ein Skeleton gibt es nur für die Detailseite; beim Filtern zeigt die Filterleiste „Aktualisiere …“.
+- Wechselkurse sind feste Config-Werte und müssen von Hand gepflegt werden.

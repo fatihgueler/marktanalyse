@@ -73,7 +73,7 @@ export interface CategoryConfig {
   label: string;
   /** Zollsätze nach Zone (Anteil, 0.027 = 2,7 %) */
   dutyRate: { EU: number; GB: number; CH: number };
-  /** Referenzpreis-Fallback: typischer Endkundenpreis = Einkaufspreis × Faktor */
+  /** Referenzpreis-Fallback: typischer Endkundenpreis = Einkaufspreis × Faktor (ANNAHME: Erfahrungswerte Dropshipping DACH) */
   retailMultiplier: number;
   /** Schlüsselwörter für die Heuristik-Kategorisierung (Mock-Modus ohne Claude) */
   keywords: string[];
@@ -245,7 +245,7 @@ export const radarConfig = {
     "wohnen-deko": { label: "Wohnen & Deko", dutyRate: { EU: 0.065, GB: 0.06, CH: 0 }, retailMultiplier: 3.0, keywords: ["deko", "decor", "vase", "kerze", "candle", "poster", "spiegel", "mirror", "pflanze", "plant", "aufbewahrung", "storage", "organizer"] },
     "kueche-haushalt": { label: "Küche & Haushalt", dutyRate: { EU: 0.027, GB: 0.02, CH: 0 }, retailMultiplier: 2.8, keywords: ["küche", "kueche", "kitchen", "waffle", "waffel", "kettle", "wasserkocher", "blender", "mixer", "reinigung", "cleaning", "haushalt", "flasche", "bottle"] },
     "beauty-pflege": { label: "Beauty & Pflege", dutyRate: { EU: 0.027, GB: 0.02, CH: 0 }, retailMultiplier: 3.5, keywords: ["beauty", "face", "gesicht", "facial", "roller", "massage", "skin", "haut", "hair", "haar", "nagel", "nail", "gua sha"] },
-    "technik-gadgets": { label: "Technik & Gadgets", dutyRate: { EU: 0.0, GB: 0.0, CH: 0 }, retailMultiplier: 2.6, keywords: ["gadget", "usb", "bluetooth", "powerbank", "power bank", "fan", "ventilator", "speaker", "lautsprecher", "keyboard", "tastatur", "smart"] },
+    "technik-gadgets": { label: "Technik & Gadgets", dutyRate: { EU: 0.0, GB: 0.0, CH: 0 }, retailMultiplier: 2.6, keywords: ["gadget", "usb", "bluetooth", "powerbank", "power bank", "fan", "ventilator", "speaker", "lautsprecher", "keyboard", "tastatur", "smart", "printer", "drucker", "display", "pixel", "beamer"] },
     "handy-zubehoer": { label: "Handy-Zubehör", dutyRate: { EU: 0.027, GB: 0.02, CH: 0 }, retailMultiplier: 3.5, keywords: ["phone", "handy", "magsafe", "halterung", "holder", "case", "hülle", "charger", "ladegerät"] },
     "spielzeug-fun": { label: "Spielzeug & Fun", dutyRate: { EU: 0.0, GB: 0.0, CH: 0 }, retailMultiplier: 3.0, keywords: ["toy", "spielzeug", "squishy", "fidget", "plush", "plüsch", "puzzle", "game", "spiel"] },
     "sport-outdoor": { label: "Sport & Outdoor", dutyRate: { EU: 0.027, GB: 0.02, CH: 0 }, retailMultiplier: 2.8, keywords: ["sport", "fitness", "yoga", "outdoor", "camping", "bike", "fahrrad", "massage gun", "massagepistole"] },
@@ -300,6 +300,7 @@ export const radarConfig = {
     paymentFeeFixedEur: 0.3,
   },
 
+  // ANNAHME: Startwerte für Drops mit Paid Social – unter 20 % Marge trägt ein Drop die Werbekosten kaum.
   margin: {
     /** Marge (Anteil vom Nettoerlös), ab der der Margen-Score > 0 wird */
     minMarginPct: 0.2,
@@ -316,6 +317,7 @@ export const radarConfig = {
     maxResults: 20,
   },
 
+  // ANNAHME: Startparameter; nach einigen Wochen Historie an echten Drop-Erfolgen kalibrieren.
   trend: {
     recentWeeks: 4,
     previousWeeks: 4,
@@ -345,6 +347,7 @@ export const radarConfig = {
     weights: { results: 0.5, orders: 0.5 },
   },
 
+  // ANNAHME: Startgewichte – Früherkennung zählt am meisten, Wettbewerb ist in Phase 1 nur ein grober Proxy.
   score: {
     weights: { trend: 0.5, margin: 0.35, competition: 0.15 },
     /** Relevanz wirkt als Faktor: 1 = linear, > 1 bestraft unsichere Matches stärker */

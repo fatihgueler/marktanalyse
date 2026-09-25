@@ -23,6 +23,11 @@ describe("HeuristicJudge", () => {
     expect(result.reason).toMatch(/Zubehör/);
   });
 
+  it("leitet die Kategorie zuerst aus dem Keyword ab", () => {
+    expect(judge.judgeOne("mini thermodrucker", "1", "Pocket Photo Printer Inkless Labels").category).toBe("technik-gadgets");
+    expect(judge.judgeOne("pixel art display", "1", "Pixel Art Frame 256 LEDs WiFi").category).toBe("technik-gadgets");
+  });
+
   it("fällt ohne Kategorie-Treffer auf „sonstiges“ zurück", () => {
     expect(judge.judgeOne("xyz", "1", "Qwerty Thing").category).toBe("sonstiges");
   });

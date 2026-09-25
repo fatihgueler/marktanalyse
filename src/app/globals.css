@@ -1,37 +1,55 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
-/* Design-Tokens (werden im Dashboard-Meilenstein final gestaltet) */
+/*
+ * Trend-Radar – „Radar-Terminal“
+ * Warme, fast schwarze Oberfläche; eine Signalfarbe (Phosphor-Grün) nur für Bedienelemente
+ * und Hervorhebungen. Datenfarben kommen aus der validierten Palette (--series-*), nie aus UI-Farben.
+ */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.16 0.01 260);
-  --foreground: oklch(0.95 0.005 260);
-  --card: oklch(0.2 0.012 260);
+  color-scheme: dark;
+  --radius: 0.625rem;
+
+  --background: #121211;
+  --foreground: #f2f1ec;
+  --card: #1a1a19;
   --card-foreground: var(--foreground);
-  --popover: oklch(0.2 0.012 260);
+  --popover: #20201e;
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.86 0.17 128);
-  --primary-foreground: oklch(0.2 0.03 128);
-  --secondary: oklch(0.26 0.012 260);
+  --primary: oklch(0.88 0.19 125);
+  --primary-foreground: #121211;
+  --secondary: #242422;
   --secondary-foreground: var(--foreground);
-  --muted: oklch(0.26 0.012 260);
-  --muted-foreground: oklch(0.7 0.01 260);
-  --accent: oklch(0.28 0.015 260);
+  --muted: #242422;
+  --muted-foreground: #a3a29a;
+  --subtle-foreground: #7d7c75;
+  --accent: #2a2a27;
   --accent-foreground: var(--foreground);
-  --destructive: oklch(0.65 0.2 25);
-  --border: oklch(0.3 0.012 260);
-  --input: oklch(0.32 0.012 260);
-  --ring: oklch(0.86 0.17 128);
-  --chart-1: oklch(0.86 0.17 128);
-  --chart-2: oklch(0.75 0.12 220);
-  --chart-3: oklch(0.8 0.14 75);
-  --chart-4: oklch(0.7 0.15 300);
-  --chart-5: oklch(0.65 0.2 25);
+  --destructive: #e66767;
+  --border: #2e2e2b;
+  --input: #34342f;
+  --ring: oklch(0.88 0.19 125);
+
+  /* Datenfarben: Referenzpalette, dunkle Stufen, validiert gegen #1a1a19 (alle Paare) */
+  --series-trend: #3987e5;
+  --series-margin: #d95926;
+  --series-competition: #199e70;
+  /* Status (nie als Serie verwendet, immer mit Icon + Text) */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
+
+  --chart-1: var(--series-trend);
+  --chart-2: var(--series-margin);
+  --chart-3: var(--series-competition);
+  --chart-4: #c98500;
+  --chart-5: #d55181;
 }
 
 @theme inline {
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -44,28 +62,76 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-series-trend: var(--series-trend);
+  --color-series-margin: var(--series-margin);
+  --color-series-competition: var(--series-competition);
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-critical: var(--status-critical);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --animate-rise: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sweep: sweep 4s linear infinite;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sweep {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
+    /* feines Radar-Raster als Atmosphäre, bleibt hinter dem Inhalt */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.88 0.19 125 / 0.07), transparent 70%),
+      linear-gradient(to right, oklch(1 0 0 / 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 0.025) 1px, transparent 1px);
+    background-size: 100% 100%, 48px 48px, 48px 48px;
+    background-attachment: fixed;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -42,6 +42,9 @@ export interface MarginBreakdown {
   marginPct: number;
   minMarginAbs: number;
   belowMinMargin: boolean;
+  /** Skala des Margen-Scores zum Zeitpunkt der Berechnung */
+  minMarginPct: number;
+  targetMarginPct: number;
   /** 0..1 */
   score: number;
 }
@@ -168,6 +171,8 @@ export function calculateMargin(input: MarginInput, config: RadarConfig = radarC
     marginPct,
     minMarginAbs,
     belowMinMargin: marginAbs < minMarginAbs,
+    minMarginPct,
+    targetMarginPct,
     score,
   };
 }

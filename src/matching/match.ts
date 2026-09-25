@@ -23,11 +23,14 @@ export function createJudge(env: CollectEnv): MatchJudge {
 
 /**
  * Bewertet alle Treffer eines Keywords: zuerst Cache, dann nur die neuen Paare über den Judge.
+ * Gecacht werden nur kostenpflichtige Live-Bewertungen; die Heuristik ist gratis und soll
+ * Config-Änderungen (Synonyme, Kategorien) sofort widerspiegeln.
  * Schlägt Claude fehl (API-Fehler, Refusal), springt die Heuristik für dieses Keyword ein.
  */
 export async function matchProducts(input: JudgeInput, judge: MatchJudge, cache: JudgmentCache): Promise<MatchResult> {
+  const useCache = judge.mode === "live";
   const ids = input.products.map((p) => p.externalId);
-  const cached = await cache.load(input.keyword, ids, judge.id);
+  const cached = useCache ? await cache.load(input.keyword, ids, judge.id) : new Map<string, Judgment>();
   const judgments = new Map<string, Judgment & { judge: string }>();
   for (const [id, j] of cached) judgments.set(id, { ...j, judge: judge.id });
 
@@ -38,7 +41,7 @@ export async function matchProducts(input: JudgeInput, judge: MatchJudge, cache:
   let fresh: Judgment[] = [];
   try {
     fresh = await judge.judge({ ...input, products: open });
-    await cache.save(input.keyword, judge.id, fresh);
+    if (useCache) await cache.save(input.keyword, judge.id, fresh);
     for (const j of fresh) judgments.set(j.externalId, { ...j, judge: judge.id });
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
