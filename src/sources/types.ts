@@ -76,6 +76,19 @@ export interface SupplyRecord extends SourceRecord {
   rating: number | null;
   /** Gesamttreffer der Suche – Anbieter-Proxy */
   resultCount: number | null;
+  /** "wholesale" = Großhandel (1688): Staffelpreise, Mindestmenge, Sammelimport. Standard: "direct" */
+  sourcingModel?: "direct" | "wholesale";
+  /** Staffelpreise, aufsteigend nach Mindestmenge (Währung wie `currency`) */
+  priceTiers?: PriceTier[];
+  /** Mindestbestellmenge */
+  moq?: number | null;
+  /** Versandgewicht je Stück in kg, falls bekannt */
+  weightKg?: number | null;
+}
+
+export interface PriceTier {
+  minQty: number;
+  price: number;
 }
 
 export interface SupplySource extends SourceBase {

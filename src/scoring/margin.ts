@@ -1,5 +1,6 @@
 import { radarConfig, type CategoryId, type Country, type RadarConfig } from "@/config/radar.config";
 import { clamp } from "@/lib/stats";
+import type { PriceTier } from "@/sources/types";
 
 export interface MarginInput {
   country: Country;
@@ -42,11 +43,20 @@ export interface MarginBreakdown {
   marginPct: number;
   minMarginAbs: number;
   belowMinMargin: boolean;
+  /** nur bei Großhandel (1688): Details der Sammelbestellung */
+  wholesale?: WholesaleDetails;
   /** Skala des Margen-Scores zum Zeitpunkt der Berechnung */
   minMarginPct: number;
   targetMarginPct: number;
   /** 0..1 */
   score: number;
+}
+
+const PERCENT_FORMAT = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 });
+
+/** 0.19 → „19 %“, 0.047 → „4,7 %“ – für die Regeltexte im Rechenweg */
+function percentLabel(share: number): string {
+  return `${PERCENT_FORMAT.format(share * 100)} %`;
 }
 
 /** Rechnet zwischen Währungen über die Config-Kurse (Einheiten je 1 EUR). */
@@ -110,7 +120,7 @@ export function calculateMargin(input: MarginInput, config: RadarConfig = radarC
   } else {
     const rate = config.categories[category].dutyRate[customs.tariffZone];
     duty = customsValue * rate;
-    dutyRule = `${(rate * 100).toFixed(1)} % Zoll (${customs.tariffZone}, ${config.categories[category].label})`;
+    dutyRule = `${percentLabel(rate)} Zoll (${customs.tariffZone}, ${config.categories[category].label})`;
   }
 
   // Einfuhrumsatzsteuer
@@ -121,7 +131,7 @@ export function calculateMargin(input: MarginInput, config: RadarConfig = radarC
     importVatRule = `Warenwert ≤ ${tax.importVatCollectedAtSaleBelow} ${currency}: USt wird beim Verkauf erhoben`;
   } else {
     importVat = (customsValue + duty) * tax.vatRate;
-    importVatRule = `${(tax.vatRate * 100).toFixed(1)} % auf Zollwert + Zoll`;
+    importVatRule = `${percentLabel(tax.vatRate)} auf Zollwert + Zoll`;
     if (importVat < tax.importVatMinimum) {
       importVat = 0;
       importVatRule = `Betrag unter ${tax.importVatMinimum} ${currency}: nicht erhoben`;
@@ -174,5 +184,127 @@ export function calculateMargin(input: MarginInput, config: RadarConfig = radarC
     minMarginPct,
     targetMarginPct,
     score,
+  };
+}
+
+// ── Großhandel (1688) ───────────────────────────────────────────────────
+
+export interface WholesaleDetails {
+  lotSize: number;
+  /** Stückpreis der gewählten Staffel in Originalwährung */
+  tierUnitPrice: number;
+  tierMinQty: number;
+  tierCurrency: string;
+  agentFee: number;
+  freight: number;
+  weightKg: number;
+  weightSource: "quelle" | "config";
+  lastMile: number;
+  importCountry: Country;
+}
+
+export interface WholesaleMarginInput {
+  country: Country;
+  category: CategoryId;
+  /** Basispreis (1 Stück) und Staffeln, Originalwährung */
+  basePrice: number;
+  priceTiers: PriceTier[];
+  purchaseCurrency: string;
+  moq: number | null;
+  weightKg: number | null;
+  referencePrice: number;
+  referenceCurrency: string;
+}
+
+/** Stückpreis bei gegebener Menge: höchste Staffel, deren Mindestmenge erreicht ist. */
+export function tierPrice(basePrice: number, tiers: readonly PriceTier[], quantity: number): PriceTier {
+  const reached = [...tiers].filter((t) => t.minQty <= quantity && t.price > 0).sort((a, b) => b.minQty - a.minQty);
+  return reached[0] ?? { minQty: 1, price: basePrice };
+}
+
+/**
+ * Stückkosten und Marge bei Großhandelsbeschaffung: Sammelbestellung über einen Einkaufsagenten,
+ * Luftfracht nach DE, reguläre Verzollung (Sendung > 150 €, keine Kleinsendungsregel), Lager in DE,
+ * Versand an Endkunden. Steuerlogik wie beim Direktversand, die EUSt fällt aber im Einfuhrland DE an.
+ */
+export function calculateWholesaleMargin(input: WholesaleMarginInput, config: RadarConfig = radarConfig): MarginBreakdown {
+  const { country, category } = input;
+  const w = config.wholesale;
+  if (!w.countries.includes(country)) throw new Error(`Großhandel ist für ${country} nicht konfiguriert (wholesale.countries).`);
+  const importCountry: Country = "DE";
+  const currency = config.countries[country].currency;
+  const fx = config.fx;
+  const eur = (amount: number) => convertCurrency(amount, "EUR", currency, fx);
+
+  const lotSize = Math.max(w.lotSize, input.moq ?? 0);
+  const tier = tierPrice(input.basePrice, input.priceTiers, lotSize);
+  const purchase = convertCurrency(tier.price, input.purchaseCurrency, currency, fx);
+  const weightKg = input.weightKg ?? w.defaultWeightKg[category];
+  const freight = eur(weightKg * w.freightPerKgEur);
+  const agentFee = purchase * w.agentFeePct;
+
+  // ANNAHME: Einkaufsprovisionen gehören nicht zum Zollwert (Art. 71 UZK) → Zollwert = Ware + Fracht
+  const customsValue = purchase + freight;
+  const dutyRate = config.categories[category].dutyRate.EU;
+  const duty = customsValue * dutyRate;
+  const importVatRate = config.tax.countries[importCountry].vatRate;
+  const importVat = (customsValue + duty) * importVatRate;
+  const clearanceFee = eur(w.clearanceFeePerShipmentEur) / lotSize;
+  const lastMile = eur(w.lastMileEur[country] ?? 0);
+  // Stückkosten bis zum Kunden – vergleichbar mit dem Direktversand, der den Versand ebenfalls enthält
+  const landedCost = purchase + agentFee + freight + duty + importVat + clearanceFee + lastMile;
+
+  const tax = config.tax.countries[country];
+  const referencePrice = convertCurrency(input.referencePrice, input.referenceCurrency, currency, fx);
+  const sellerChargesVat = tax.saleVat === "always" || (tax.saleVat === "followVatMode" && config.tax.vatMode === "regelbesteuert");
+  const netRevenue = sellerChargesVat ? referencePrice / (1 + tax.vatRate) : referencePrice;
+  const saleVat = referencePrice - netRevenue;
+  const importVatDeductible = sellerChargesVat;
+  const effectiveCost = landedCost - (importVatDeductible ? importVat : 0);
+  const paymentFees = referencePrice * config.fees.paymentFeePct + eur(config.fees.paymentFeeFixedEur);
+  const marginAbs = netRevenue - effectiveCost - paymentFees;
+  const marginPct = netRevenue > 0 ? marginAbs / netRevenue : 0;
+  const minMarginAbs = eur(config.margin.minMarginAbsEur);
+  const { minMarginPct, targetMarginPct } = config.margin;
+
+  return {
+    currency,
+    vatMode: config.tax.vatMode,
+    purchase,
+    shipping: freight,
+    shippingSource: input.weightKg === null ? "config" : "quelle",
+    customsValue,
+    duty,
+    dutyRule: `${percentLabel(dutyRate)} Zoll (EU, Sammelimport)`,
+    importVat,
+    importVatRule: `${percentLabel(importVatRate)} EUSt bei Einfuhr nach ${importCountry}`,
+    clearanceFee,
+    landedCost,
+    referencePrice,
+    sellerChargesVat,
+    saleVat,
+    netRevenue,
+    importVatDeductible,
+    effectiveCost,
+    paymentFees,
+    marginAbs,
+    marginPct,
+    minMarginAbs,
+    belowMinMargin: marginAbs < minMarginAbs,
+    wholesale: {
+      lotSize,
+      tierUnitPrice: tier.price,
+      tierMinQty: tier.minQty,
+      tierCurrency: input.purchaseCurrency,
+      agentFee,
+      freight,
+      weightKg,
+      weightSource: input.weightKg === null ? "config" : "quelle",
+      lastMile,
+      importCountry,
+    },
+    minMarginPct,
+    targetMarginPct,
+    score: clamp((marginPct - minMarginPct) / (targetMarginPct - minMarginPct), 0, 1),
   };
 }

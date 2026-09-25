@@ -283,12 +283,14 @@ function curveValue(shape: CurveShape, t: number, weekDate: Date): number {
 /**
  * Erzeugt eine Google-Trends-ähnliche Wochenreihe: Rauschen, Länder-Verzögerung,
  * Normierung auf Maximum = 100, ganzzahlige Werte. Deterministisch je Keyword, Land und Woche.
+ * `leadWeeks` verschiebt die Kurve nach vorn, für Quellen, die Trends früher zeigen.
  */
-export function mockSeries(product: MockProduct, country: Country, now: Date): TrendPoint[] {
+export function mockSeries(product: MockProduct, country: Country, now: Date, leadWeeks = 0): TrendPoint[] {
   const lastCompleteWeek = addWeeks(mondayOf(now), -1);
   const firstWeek = addWeeks(lastCompleteWeek, -(SERIES_WEEKS - 1));
-  const rng = createRng(`${product.slug}|${country}|${isoDate(lastCompleteWeek)}`);
-  const lag = product.lagWeeks?.[country] ?? 0;
+  const rng = createRng(`${product.slug}|${country}|${isoDate(lastCompleteWeek)}|${leadWeeks}`);
+  // leadWeeks > 0: Quelle sieht den Trend früher (z. B. TikTok vor Google)
+  const lag = (product.lagWeeks?.[country] ?? 0) - leadWeeks;
   const absent = product.absentIn?.includes(country) ?? false;
 
   const rawValues = Array.from({ length: SERIES_WEEKS }, (_, t) => {

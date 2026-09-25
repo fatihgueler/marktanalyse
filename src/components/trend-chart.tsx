@@ -5,23 +5,25 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { formatWeek } from "@/lib/format";
 import type { TrendPoint } from "@/sources/types";
 
-const chartConfig = { value: { label: "Suchinteresse", color: "var(--series-trend)" } } satisfies ChartConfig;
 
 interface TrendChartProps {
   series: TrendPoint[];
+  /** z. B. „Suchinteresse“ oder „TikTok-Popularität“ */
+  metricLabel: string;
   recentWeeks: number;
   previousWeeks: number;
 }
 
-/** 52-Wochen-Verlauf; die Fenster „Vorperiode“ und „aktuell“ zeigen, was der Trend-Score vergleicht. */
-export function TrendChart({ series, recentWeeks, previousWeeks }: TrendChartProps) {
+/** Wochenverlauf; die Fenster „Vorperiode“ und „aktuell“ zeigen, was der Trend-Score vergleicht. */
+export function TrendChart({ series, metricLabel, recentWeeks, previousWeeks }: TrendChartProps) {
+  const chartConfig = { value: { label: metricLabel, color: "var(--series-trend)" } } satisfies ChartConfig;
   const recentStart = series[series.length - recentWeeks]?.weekStart;
   const previousStart = series[series.length - recentWeeks - previousWeeks]?.weekStart;
   const previousEnd = series[series.length - recentWeeks - 1]?.weekStart;
   const last = series[series.length - 1]?.weekStart;
 
   return (
-    <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full" role="img" aria-label="Suchinteresse der letzten 52 Wochen">
+    <ChartContainer config={chartConfig} className="aspect-auto h-64 w-full" role="img" aria-label={`${metricLabel} der letzten ${series.length} Wochen`}>
       <AreaChart data={series} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">

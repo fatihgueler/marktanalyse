@@ -18,7 +18,7 @@ import { createJudge, matchProducts, type JudgmentCache } from "@/matching/match
 import type { Judgment, MatchJudge } from "@/matching/types";
 import { combineAdSignals } from "@/scoring/ads";
 import { scoreCompetition } from "@/scoring/competition";
-import { calculateMargin, fallbackReferencePrice } from "@/scoring/margin";
+import { calculateMargin, calculateWholesaleMargin, fallbackReferencePrice } from "@/scoring/margin";
 import { totalScore, type CandidateBreakdown } from "@/scoring/score";
 import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
@@ -73,6 +73,18 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   if (modes["tiktok-ads"] === "live") {
     const pages = Math.ceil(radarConfig.ads.maxAdsPerKeyword.tiktok / 10);
     lines.push(`TikTok Ad Library: bis zu ${adCountries * maxKeywordsPerCountry * pages} Anfragen (Tageskontingent)`);
+  }
+  const scraping = radarConfig.scraping;
+  if (modes["tiktok-trends"] === "live") {
+    const runs = scraping.tiktokHashtags.countries.length;
+    const usd = Math.min(scraping.tiktokHashtags.maxChargeUsd, (scraping.tiktokHashtags.hashtagsPerCountry / 1000) * scraping.tiktokHashtags.usdPerThousandResults);
+    lines.push(`Apify TikTok Creative Center (Scraping): ${runs} Läufe, je höchstens ${usd.toFixed(2)} $ (hart begrenzt auf ${scraping.tiktokHashtags.maxChargeUsd} $)`);
+  }
+  if (modes["alibaba-1688"] === "live") {
+    const searches = radarConfig.wholesale.countries.length * maxKeywordsPerCountry;
+    lines.push(
+      `Apify 1688 (Scraping): bis zu ${searches} Suchen, geschätzt ${(searches * scraping.alibaba1688.usdPerSearchEstimate).toFixed(2)} $ (je Suche hart begrenzt auf ${scraping.alibaba1688.maxChargeUsd} $) + Actor-Miete`,
+    );
   }
   if (modes.claude === "live") {
     lines.push(`Claude (${process.env.ANTHROPIC_MODEL ?? "Standardmodell"}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
@@ -250,21 +262,47 @@ async function fetchAdSignals(ctx: RunContext, keyword: string, country: Country
   return results.filter((r): r is AdRecord => r !== null);
 }
 
-async function processKeyword(ctx: RunContext, supply: SupplySource, demand: ScoredDemand, country: Country): Promise<void> {
-  const keyword = demand.record.keyword;
-  let offers: SupplyRecord[];
-  try {
-    offers = await supply.search(keyword, country, radarConfig.supply.resultsPerKeyword);
-  } catch (error) {
-    ctx.errors.push({ source: supply.id, country, keyword, message: errorMessage(error) });
-    return;
+/** Angebote aller Quellen für ein Keyword holen; Fehler einer Quelle stoppen die anderen nicht. */
+async function searchAllSupply(ctx: RunContext, keyword: string, country: Country) {
+  const results: { supply: SupplySource; offers: SupplyRecord[] }[] = [];
+  for (const supply of ctx.sources.supply) {
+    try {
+      const offers = await supply.search(keyword, country, radarConfig.supply.resultsPerKeyword);
+      if (offers.length > 0) results.push({ supply, offers });
+    } catch (error) {
+      ctx.errors.push({ source: supply.id, country, keyword, message: errorMessage(error) });
+    }
   }
-  if (offers.length === 0) return;
-  ctx.stats.offers += offers.length;
+  return results;
+}
 
-  const stored = await storeOffers(ctx, offers, country);
+/**
+ * Ein Keyword komplett verarbeiten: Angebote aller Quellen, dann Referenzpreis und Werbedaten
+ * EINMAL je Keyword (nicht je Angebotsquelle – spart Kosten), dann Matching und Scoring je Quelle.
+ */
+async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Country): Promise<void> {
+  const keyword = demand.record.keyword;
+  const bySource = await searchAllSupply(ctx, keyword, country);
+  if (bySource.length === 0) return;
+
   const [reference, adRecords] = await Promise.all([fetchReferencePrice(ctx, keyword, country), fetchAdSignals(ctx, keyword, country)]);
   const ads = combineAdSignals(adRecords);
+  for (const { offers } of bySource) {
+    ctx.stats.offers += offers.length;
+    await processOffers(ctx, offers, demand, country, reference, ads);
+  }
+}
+
+async function processOffers(
+  ctx: RunContext,
+  offers: SupplyRecord[],
+  demand: ScoredDemand,
+  country: Country,
+  reference: PriceRecord | null,
+  ads: ReturnType<typeof combineAdSignals>,
+): Promise<void> {
+  const keyword = demand.record.keyword;
+  const stored = await storeOffers(ctx, offers, country);
 
   const productIds = new Map(stored.map((s) => [s.offer.externalId, s.productId]));
   const match = await matchProducts(
@@ -278,7 +316,7 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
   );
   if (match.error) ctx.errors.push({ source: "claude", country, keyword, message: match.error });
 
-  // Wettbewerb gilt für das Keyword als Ganzes: Anbieterzahl + Bestellvolumen aller Top-Treffer.
+  // Wettbewerb gilt für das Keyword je Quelle: Anbieterzahl + Bestellvolumen aller Top-Treffer + Werbedruck.
   const orders = offers.map((o) => o.orders30d).filter((o): o is number => o !== null);
   const competition = scoreCompetition({
     resultCount: offers[0]?.resultCount ?? null,
@@ -291,20 +329,34 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
     if (!judgment || judgment.relevance < radarConfig.matching.minRelevance) continue;
 
     const currency = radarConfig.countries[country].currency;
+    // ANNAHME: Beim Großhandelspreis fällt die Faktor-Schätzung konservativ (niedriger) aus.
     const referencePrice = reference?.medianPrice ?? fallbackReferencePrice(offer.price, offer.currency, country, judgment.category);
     const referenceCurrency = reference?.currency ?? currency;
     const referenceSource = reference ? reference.source : "config-multiplikator";
 
-    const margin = calculateMargin({
-      country,
-      category: judgment.category,
-      purchasePrice: offer.price,
-      purchaseCurrency: offer.currency,
-      shippingCost: offer.shippingCost,
-      shippingCurrency: offer.currency,
-      referencePrice,
-      referenceCurrency,
-    });
+    const margin =
+      offer.sourcingModel === "wholesale"
+        ? calculateWholesaleMargin({
+            country,
+            category: judgment.category,
+            basePrice: offer.price,
+            priceTiers: offer.priceTiers ?? [],
+            purchaseCurrency: offer.currency,
+            moq: offer.moq ?? null,
+            weightKg: offer.weightKg ?? null,
+            referencePrice,
+            referenceCurrency,
+          })
+        : calculateMargin({
+            country,
+            category: judgment.category,
+            purchasePrice: offer.price,
+            purchaseCurrency: offer.currency,
+            shippingCost: offer.shippingCost,
+            shippingCurrency: offer.currency,
+            referencePrice,
+            referenceCurrency,
+          });
     const score = totalScore({ trend: demand.trend, margin, competition, relevance: judgment.relevance });
     const breakdown: CandidateBreakdown = {
       trend: demand.trend,
@@ -351,14 +403,15 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
 }
 
 async function collectCountry(ctx: RunContext, country: Country): Promise<void> {
+  // Liefern mehrere Trendquellen dasselbe Keyword, wird es nur einmal weiterverarbeitet (erste Quelle gewinnt).
+  const processed = new Set<string>();
   for (const trendSource of ctx.sources.trend) {
     const demand = await collectDemand(ctx, trendSource, country);
     // Vorfilter spart Angebots-, Preis- und Claude-Aufrufe für Keywords ohne Dynamik.
-    const qualified = demand.filter((d) => d.trend.score >= radarConfig.supply.minTrendScoreForSupply);
+    const qualified = demand.filter((d) => d.trend.score >= radarConfig.supply.minTrendScoreForSupply && !processed.has(d.record.keyword));
+    qualified.forEach((d) => processed.add(d.record.keyword));
     ctx.stats.qualified += qualified.length;
-    for (const supply of ctx.sources.supply) {
-      await mapWithConcurrency(qualified, radarConfig.collect.concurrency, (d) => processKeyword(ctx, supply, d, country));
-    }
+    await mapWithConcurrency(qualified, radarConfig.collect.concurrency, (d) => processKeyword(ctx, d, country));
   }
 }
 

@@ -3,13 +3,19 @@
  * live oder im Mock-Modus laufen. Der Mock-Modus greift automatisch, sobald ein Key fehlt.
  *
  * Werbebibliotheken (Meta, TikTok) implementieren `AdSignalSource`.
- * Offen: 1688.com als weitere `SupplySource` – nur über offiziellen Zugang (siehe PLAN-PHASE2.md, F1).
- * TikTok Creative Center hat keine offizielle API und wird deshalb nicht angebunden.
+ * Phase 2b: TikTok Creative Center (`TrendSource`) und 1688 (`SupplySource`) laufen über den
+ * Scraping-Dienst Apify (APIFY_TOKEN) – bewusste Entscheidung des Auftraggebers, siehe PLAN-PHASE2.md §9.
  */
 import type { CollectEnv } from "@/lib/env";
 import { AdLibraryMockSource } from "./ads/ad-library.mock";
 import { MetaAdLibrarySource } from "./ads/meta-ad-library";
 import { TikTokAdsSource } from "./ads/tiktok-ads";
+import { createHashtagClassifier } from "@/matching/hashtag-classifier";
+import { ClaudeKeywordTranslator } from "@/matching/keyword-translator";
+import { Alibaba1688ApifySource } from "./scraping/alibaba-1688";
+import { Alibaba1688MockSource } from "./scraping/alibaba-1688.mock";
+import { TikTokHashtagsApifySource } from "./scraping/tiktok-hashtags";
+import { TikTokHashtagsMockSource } from "./scraping/tiktok-hashtags.mock";
 import { GoogleTrendsMockSource } from "./demand/google-trends.mock";
 import { GoogleTrendsSerpApiSource } from "./demand/google-trends.serpapi";
 import { GoogleShoppingMockSource } from "./price/google-shopping.mock";
@@ -29,13 +35,18 @@ export interface SourceSet {
 }
 
 export function createSources(env: CollectEnv, now: Date = new Date()): SourceSet {
+  const hashtagClassifier = createHashtagClassifier(env);
   const trend: TrendSource[] = [
     env.SERPAPI_API_KEY ? new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY) : new GoogleTrendsMockSource(now),
+    env.APIFY_TOKEN ? new TikTokHashtagsApifySource(env.APIFY_TOKEN, hashtagClassifier) : new TikTokHashtagsMockSource(hashtagClassifier, now),
   ];
 
   const { ALIEXPRESS_APP_KEY: appKey, ALIEXPRESS_APP_SECRET: appSecret, ALIEXPRESS_TRACKING_ID: trackingId } = env;
   const supply: SupplySource[] = [
     appKey && appSecret && trackingId ? new AliExpressSource({ appKey, appSecret, trackingId }) : new AliExpressMockSource(),
+    env.APIFY_TOKEN
+      ? new Alibaba1688ApifySource(env.APIFY_TOKEN, env.ANTHROPIC_API_KEY ? new ClaudeKeywordTranslator(env.ANTHROPIC_API_KEY, env.ANTHROPIC_MODEL) : null)
+      : new Alibaba1688MockSource(),
   ];
 
   const price: PriceSource = env.SERPAPI_API_KEY

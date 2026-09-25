@@ -7,7 +7,7 @@ import { radarConfig, type RadarConfig } from "@/config/radar.config";
  */
 export function makeTestConfig(): RadarConfig {
   const config = structuredClone(radarConfig);
-  config.fx = { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17 };
+  config.fx = { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17, CNY: 8 };
   config.tax.vatMode = "kleinunternehmer";
   config.tax.countries = {
     DE: { vatRate: 0.19, saleVat: "followVatMode", importVatMinimum: 0, importVatCollectedAtSaleBelow: null },
@@ -39,6 +39,17 @@ export function makeTestConfig(): RadarConfig {
   };
   config.competition = { resultCountLogCap: 5, ordersLogCap: 5, advertisersLogCap: 2, weights: { results: 0.25, orders: 0.25, advertisers: 0.5 } };
   config.score = { weights: { trend: 0.5, margin: 0.35, competition: 0.15 }, relevanceExponent: 1 };
+  config.fx.CNY = 8;
+  config.wholesale = {
+    ...config.wholesale,
+    countries: ["DE", "AT"],
+    lotSize: 200,
+    agentFeePct: 0.08,
+    freightPerKgEur: 6.5,
+    clearanceFeePerShipmentEur: 60,
+    lastMileEur: { DE: 4.5, AT: 6.9 },
+  };
+  config.wholesale.defaultWeightKg.beleuchtung = 0.6;
   config.calibration = { minPerGroup: 3, strongDifference: 0.15, weakDifference: 0.05 };
   return config;
 }

@@ -18,7 +18,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 }
 
 /** Drei Karten (Trend, Marge, Wettbewerb) mit Teil-Score, Gewicht, Beitrag und allen Zwischenwerten. */
-export function ScoreBreakdown({ breakdown }: { breakdown: CandidateBreakdown }) {
+export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: CandidateBreakdown; supplierLabel: string }) {
   const { trend, margin, competition, score } = breakdown;
   const partScore: Record<PartKey, number> = { trend: trend.score, margin: margin.score, competition: competition.score };
 
@@ -49,7 +49,7 @@ export function ScoreBreakdown({ breakdown }: { breakdown: CandidateBreakdown })
     ),
     competition: (
       <>
-        <Row label="Treffer auf AliExpress" value={competition.resultCount === null ? "unbekannt" : formatNumber(competition.resultCount)} hint="Anbieter-Proxy" />
+        <Row label={`Treffer auf ${supplierLabel}`} value={competition.resultCount === null ? "unbekannt" : formatNumber(competition.resultCount)} hint="Anbieter-Proxy" />
         <Row label="Bestellungen / 30 Tage (Top-Treffer)" value={competition.orders30dSum === null ? "unbekannt" : formatNumber(competition.orders30dSum)} />
         <Row
           label="Werbetreibende im Land"

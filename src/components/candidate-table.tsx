@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, TriangleAlert } from "lucide-react";
 import { radarConfig, type CategoryId, type Country } from "@/config/radar.config";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
-import { sourceLabel } from "@/lib/labels";
+import { demandMetric, sourceLabel } from "@/lib/labels";
 import type { CandidateRow } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import type { AdsBreakdown } from "@/scoring/ads";
@@ -51,7 +51,7 @@ export function CandidateTable({ rows }: { rows: CandidateRow[] }) {
             <th scope="col" className="py-3 pr-4 font-medium">Produkt</th>
             <th scope="col" className="py-3 pr-4 font-medium">Land</th>
             <th scope="col" className="w-44 py-3 pr-4 font-medium">Score</th>
-            <th scope="col" className="py-3 pr-4 font-medium">Trend · 52 Wo.</th>
+            <th scope="col" className="py-3 pr-4 font-medium">Trend</th>
             <th scope="col" className="py-3 pr-4 text-right font-medium">Marge / Stück</th>
             <th scope="col" className="py-3 pr-4 text-right font-medium">Werbung</th>
             <th scope="col" className="py-3 pr-4 font-medium">Quelle</th>
@@ -97,7 +97,7 @@ export function CandidateTable({ rows }: { rows: CandidateRow[] }) {
                   <ScoreBar score={row.breakdown.score} />
                 </td>
                 <td className="py-3 pr-4 align-top">
-                  <Sparkline series={row.series} label={`Suchinteresse der letzten 52 Wochen, aktuell ${formatNumber(trend.recent)} von 100, ${growthLabel(trend.growth)}`} />
+                  <Sparkline series={row.series} label={`${demandMetric(row.demandSignal.source).label} der letzten ${row.series.length} Wochen, aktuell ${formatNumber(trend.recent)} von 100, ${growthLabel(trend.growth)}`} />
                   <div className="mt-0.5 font-mono text-[11px] text-muted-foreground tabular">{growthLabel(trend.growth)}</div>
                 </td>
                 <td className="py-3 pr-4 text-right align-top">

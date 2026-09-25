@@ -90,9 +90,9 @@ export const radarConfig = {
   /**
    * Wechselkurse: Einheiten der Währung pro 1 EUR.
    * ANNAHME: feste, gerundete Kurse (Stand September 2026) – regelmäßig manuell pflegen.
-   * USD nur als Sicherheitsnetz, falls eine Quelle nicht in EUR liefert.
+   * USD nur als Sicherheitsnetz, falls eine Quelle nicht in EUR liefert; CNY für 1688.
    */
-  fx: { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17 } as Record<string, number> & Record<Currency, number>,
+  fx: { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17, CNY: 8.3 } as Record<string, number> & Record<Currency | "USD" | "CNY", number>,
 
   demand: {
     /**
@@ -334,8 +334,8 @@ export const radarConfig = {
      * zu gering – Trends zeigt dann vereinzelte, auf 100 normierte Ausschläge → T = 0.
      */
     requireContinuousRecentInterest: true,
-    /** Mindestlänge der Zeitreihe in Wochen */
-    minSeriesWeeks: 16,
+    /** Mindestlänge der Zeitreihe in Wochen (TikTok-Kurven decken nur ~17 Wochen ab) */
+    minSeriesWeeks: 12,
     weights: { growth: 0.55, early: 0.35, level: 0.1 },
   },
 
@@ -379,6 +379,75 @@ export const radarConfig = {
     samplesPerKeyword: 5,
     /** ANNAHME: Graph-API-Version Stand September 2026 */
     metaGraphVersion: "v26.0",
+  },
+
+  /**
+   * Scraping über den Datendienst Apify (Phase 2b). Actor-IDs sind austauschbar; ändert sich die
+   * Ausgabe eines Actors, müssen die Adapter in src/sources/scraping/ angepasst werden.
+   */
+  scraping: {
+    /** Maximale Laufzeit eines synchronen Apify-Laufs (Apify bricht nach 300 s mit HTTP 408 ab) */
+    runTimeoutSeconds: 300,
+    tiktokHashtags: {
+      actorId: "memo23~tiktok-trending-hashtags-scraper",
+      /** ANNAHME: Creative Center führt DE und GB; AT/CH sind dort keine eigenen Märkte */
+      countries: ["DE", "GB"] as Country[],
+      /** Zeitfenster der Popularitätskurve – 120 Tage ergeben ~17 Wochenwerte */
+      days: "120",
+      hashtagsPerCountry: 100,
+      /** harte Kostengrenze je Lauf in USD (Apify-Parameter maxTotalChargeUsd) */
+      maxChargeUsd: 0.5,
+      /** ANNAHME: Preis laut Actor-Seite, nur für die Kostenschätzung vor Live-Läufen */
+      usdPerThousandResults: 1.5,
+      /** Allgemeine Hashtags ohne Produktbezug – werden vor der Klassifizierung verworfen */
+      ignore: ["fyp", "foryou", "foryoupage", "fy", "viral", "trend", "trending", "tiktok", "tiktokmademebuyit", "tiktokshop", "explore", "xyzbca"],
+      /** Heuristik: Anteil des Hashtags, der aus bekannten Produktwörtern bestehen muss */
+      minCoverage: 0.8,
+    },
+    alibaba1688: {
+      actorId: "songd~1688-search-scraper",
+      /** Seiten je Suche (1 Seite ≈ 100 Produkte) */
+      maxPages: 1,
+      /** Angebote, die je Keyword übernommen werden */
+      resultsPerKeyword: 8,
+      maxChargeUsd: 0.5,
+      /** ANNAHME: Mietpreis 30 $/Monat + Plattformkosten; je Suche grob geschätzt */
+      usdPerSearchEstimate: 0.05,
+    },
+  },
+
+  /**
+   * Großhandels-Beschaffung (1688): Sammelbestellung über einen Einkaufsagenten, Luftfracht nach DE,
+   * reguläre Verzollung, Lager in DE, Versand an Endkunden.
+   */
+  wholesale: {
+    /** ANNAHME: nur aus einem Lager in DE belieferte Länder (CH/GB würden erneut verzollt) */
+    countries: ["DE", "AT"] as Country[],
+    /** ANNAHME: Stück je Drop-Bestellung; höhere Staffeln senken den Stückpreis */
+    lotSize: 200,
+    /** ANNAHME: Agentengebühr (Einkauf, Qualitätskontrolle, Konsolidierung) in % vom Warenwert */
+    agentFeePct: 0.08,
+    /** ANNAHME: Luftfracht China → DE inkl. Abholung, EUR je kg */
+    freightPerKgEur: 6.5,
+    /** ANNAHME: Verzollungspauschale des Spediteurs je Sendung (EUR), auf die Losgröße verteilt */
+    clearanceFeePerShipmentEur: 60,
+    /** ANNAHME: Versand vom Lager in DE an Endkunden, EUR je Stück */
+    lastMileEur: { DE: 4.5, AT: 6.9 } as Partial<Record<Country, number>>,
+    /** ANNAHME: Versandgewicht je Stück, wenn die Quelle keins liefert (kg) */
+    defaultWeightKg: {
+      beleuchtung: 0.6,
+      "wohnen-deko": 0.8,
+      "kueche-haushalt": 0.9,
+      "beauty-pflege": 0.3,
+      "technik-gadgets": 0.4,
+      "handy-zubehoer": 0.2,
+      "spielzeug-fun": 0.2,
+      "sport-outdoor": 0.7,
+      haustier: 0.8,
+      "mode-accessoires": 0.3,
+      "buero-schreibwaren": 0.3,
+      sonstiges: 0.5,
+    } satisfies Record<CategoryId, number>,
   },
 
   calibration: {

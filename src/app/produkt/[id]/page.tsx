@@ -13,7 +13,7 @@ import { ScoreHistoryChart } from "@/components/score-history-chart";
 import { TrendChart } from "@/components/trend-chart";
 import { radarConfig, type CategoryId, type Country } from "@/config/radar.config";
 import { formatDateTime, formatMoney, formatNumber, formatPercent, formatWeek } from "@/lib/format";
-import { judgeLabel, sourceLabel } from "@/lib/labels";
+import { demandMetric, judgeLabel, sourceLabel } from "@/lib/labels";
 import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
 import { deleteDrop } from "./drop-actions";
 
@@ -30,22 +30,26 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 /** Klartext-Zusammenfassung der wichtigsten Gründe – dieselben Zahlen wie in der Aufschlüsselung. */
 function summarize(candidate: CandidateDetail): string[] {
   const { trend, margin, competition } = candidate.breakdown;
+  const metric = demandMetric(candidate.demandSignal.source).label;
   const lines: string[] = [];
   if (trend.growth > 0) {
     const phase = trend.earlyComponent >= 0.5 ? "bei kaum Vorgeschichte – typisch für die Frühphase" : "auf bereits etabliertem Niveau";
-    lines.push(`Suchinteresse +${formatPercent(trend.growth)} gegenüber den 4 Wochen davor, ${phase}.`);
+    lines.push(`${metric} +${formatPercent(trend.growth)} gegenüber den 4 Wochen davor, ${phase}.`);
   } else {
-    lines.push("Das Suchinteresse steigt aktuell nicht – der Trend-Anteil ist entsprechend niedrig.");
+    lines.push(`${metric} steigt aktuell nicht – der Trend-Anteil ist entsprechend niedrig.`);
   }
   lines.push(
     `Nach Versand, Zoll, Einfuhrumsatzsteuer und Gebühren bleiben ${formatMoney(margin.marginAbs, margin.currency)} je Stück (${formatPercent(margin.marginPct)} vom Nettoerlös).`,
   );
   const level = competition.score >= 0.5 ? "überschaubar" : "bereits hoch";
   const ads = candidate.breakdown.ads;
+  const supplier = sourceLabel(candidate.product.source);
+  const offersText = competition.resultCount !== null ? `${formatNumber(competition.resultCount)} Angebote auf ${supplier}` : null;
   if (ads?.covered) {
-    lines.push(`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür, ${formatNumber(competition.resultCount ?? 0)} Angebote auf AliExpress – Wettbewerb ${level}.`);
-  } else if (competition.resultCount !== null) {
-    lines.push(`${formatNumber(competition.resultCount)} Angebote auf AliExpress – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
+    const parts = [`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür`, offersText].filter(Boolean);
+    lines.push(`${parts.join(", ")} – Wettbewerb ${level}.`);
+  } else if (offersText) {
+    lines.push(`${offersText} – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
   }
   return lines;
 }
@@ -84,6 +88,8 @@ export default async function ProductDetailPage({ params }: Params) {
           <div className="grid content-start gap-3">
             <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
               <span className="rounded border bg-muted/60 px-1.5 py-0.5 text-foreground">{candidate.keyword}</span>
+              <span>via {sourceLabel(candidate.demandSignal.source)}{candidate.demandSignal.seedTerm?.startsWith("#") ? ` (${candidate.demandSignal.seedTerm})` : ""}</span>
+              <span aria-hidden="true">·</span>
               <span>{radarConfig.countries[country].label}</span>
               <span aria-hidden="true">·</span>
               <span>{categoryLabel}</span>
@@ -143,17 +149,19 @@ export default async function ProductDetailPage({ params }: Params) {
 
         <section aria-labelledby="warum-titel" className="grid gap-4">
           <h2 id="warum-titel" className="text-lg font-semibold">Warum steht es hier? Score-Aufschlüsselung</h2>
-          <ScoreBreakdown breakdown={breakdown} />
+          <ScoreBreakdown breakdown={breakdown} supplierLabel={sourceLabel(candidate.product.source)} />
         </section>
 
         <section aria-labelledby="trend-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id="trend-titel" className="text-lg font-semibold">
-              Suchinteresse „{candidate.keyword}“ · {country}
+              {demandMetric(candidate.demandSignal.source).label} „{candidate.keyword}“ · {country}
             </h2>
-            <p className="text-xs text-muted-foreground">Google Trends, relativ (100 = Höchstwert im Zeitraum)</p>
+            <p className="text-xs text-muted-foreground">{demandMetric(candidate.demandSignal.source).note}</p>
           </div>
-          <TrendChart series={candidate.series} recentWeeks={radarConfig.trend.recentWeeks} previousWeeks={radarConfig.trend.previousWeeks} />
+          <TrendChart
+            series={candidate.series}
+            metricLabel={demandMetric(candidate.demandSignal.source).label} recentWeeks={radarConfig.trend.recentWeeks} previousWeeks={radarConfig.trend.previousWeeks} />
         </section>
 
         <section aria-labelledby="werbung-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
@@ -218,7 +226,10 @@ export default async function ProductDetailPage({ params }: Params) {
         </section>
 
         <footer className="grid gap-1 border-t pt-4 font-mono text-[11px] text-subtle-foreground">
-          <p>Nachfrage abgerufen: {formatDateTime(candidate.demandSignal.fetchedAt)} ({sourceLabel(candidate.demandSignal.source)})</p>
+          <p>
+            Nachfrage abgerufen: {formatDateTime(candidate.demandSignal.fetchedAt)} ({sourceLabel(candidate.demandSignal.source)}
+            {candidate.demandSignal.source === "tiktok-trends" ? ", über Scraping-Dienst" : ""})
+          </p>
           <p>Angebot abgerufen: {formatDateTime(candidate.supplyOffer.fetchedAt)} ({sourceLabel(candidate.product.source)}, Produkt-ID {candidate.product.externalId})</p>
           {candidate.referencePriceMeta ? <p>Referenzpreis abgerufen: {formatDateTime(candidate.referencePriceMeta.fetchedAt)}</p> : null}
           <p>

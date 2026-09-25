@@ -38,16 +38,25 @@ export class Throttle {
  * GET/POST mit Timeout, Retry bei 429/5xx/Netzwerkfehlern und exponentiellem Backoff.
  * Die URL wird in Fehlermeldungen ohne Query-String ausgegeben, damit keine Keys in Logs landen.
  */
-export async function fetchJson<T>(url: string, init: RequestInit = {}, throttle?: Throttle): Promise<T> {
+export interface FetchOptions {
+  /** Timeout je Versuch; Standard aus der Config */
+  timeoutMs?: number;
+  /** 1 = keine Wiederholung – für kostenpflichtige, nicht idempotente Aufrufe (z. B. Scraping-Läufe) */
+  maxAttempts?: number;
+}
+
+export async function fetchJson<T>(url: string, init: RequestInit = {}, throttle?: Throttle, options: FetchOptions = {}): Promise<T> {
   const safeUrl = url.split("?")[0] ?? url;
+  const maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
+  const timeoutMs = options.timeoutMs ?? radarConfig.collect.requestTimeoutMs;
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await throttle?.wait();
     try {
       const response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(radarConfig.collect.requestTimeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (response.ok) return (await response.json()) as T;
 
@@ -59,9 +68,9 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}, throttle
       if (error instanceof HttpError && error.status !== null && !RETRYABLE_STATUS.has(error.status)) throw error;
       lastError = error;
     }
-    if (attempt < MAX_ATTEMPTS) await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1));
+    if (attempt < maxAttempts) await sleep(BACKOFF_BASE_MS * 2 ** (attempt - 1));
   }
 
   const reason = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new HttpError(`Anfrage an ${safeUrl} nach ${MAX_ATTEMPTS} Versuchen fehlgeschlagen: ${reason}`, null, null);
+  throw new HttpError(`Anfrage an ${safeUrl} nach ${maxAttempts} Versuch(en) fehlgeschlagen: ${reason}`, null, null);
 }

@@ -192,3 +192,31 @@ Technische Details aus der Doku:
 - Meta: `GET https://graph.facebook.com/v26.0/ads_archive` mit `search_terms`, `ad_reached_countries=["DE"]`, `ad_type=ALL`, `ad_active_status=ACTIVE`, `search_type=KEYWORD_EXACT_PHRASE`, Feldern `id,page_id,page_name,ad_delivery_start_time,ad_snapshot_url`.
 - TikTok: Client-Token über `POST https://open.tiktokapis.com/v2/oauth/token/` (`grant_type=client_credentials`, 2 h gültig); Anzeigen über `POST https://open.tiktokapis.com/v2/research/adlib/ad/query/` mit `filters` (Zeitraum, Länder, Status), `search_term`, `search_type`, `max_count` ≤ 10, Paging über `search_id`.
 - Beide Bibliotheken decken nicht-politische Anzeigen nur für die **EU** ab → Werbedaten gibt es für **DE und AT**, nicht für CH und GB.
+
+---
+
+## 9. Phase 2b – Scraping über Datendienst (Wunsch: 25.09.2026)
+
+**Entscheidung des Auftraggebers:** Weil viele offizielle APIs nicht zu bekommen sind, wird Scraping eingebunden. Das hebt die Phase-1-Grenze „kein Scraping von TikTok, 1688 …“ bewusst auf.
+
+**Umsetzung:** über den Datendienst **Apify** (REST-API, keine neue Abhängigkeit), nicht mit eigenen Scrapern.
+- Eigene Scraper müssten den Bot-Schutz von TikTok und 1688 aktiv umgehen (CAPTCHAs, Fingerprinting, Proxy-Rotation). Solchen Umgehungscode baue ich nicht.
+- Apify-Actors sind austauschbar (Actor-ID in der Config) und haben Mock-Modus und `--live`-Schutz wie alle Quellen.
+- Harte Kostengrenze je Aufruf über `maxTotalChargeUsd`; **keine automatischen Wiederholungen** (jeder Versuch kostet).
+
+**Quellen:**
+| Quelle | Actor (Config) | Rolle | Länder |
+|---|---|---|---|
+| TikTok Creative Center, Trend-Hashtags | `memo23~tiktok-trending-hashtags-scraper` | `TrendSource`: Hashtags mit Popularitätskurve (120 Tage, 0–100) | laut Actor 27 Märkte; konfiguriert DE, GB |
+| 1688 Produktsuche | `songd~1688-search-scraper` | `SupplySource` mit **Großhandels-Kalkulation** (Staffelpreise, Losgröße, Agent, Fracht, regulärer Zoll) | nur DE, AT (Lager in DE) |
+
+**Hashtag → Suchbegriff:** Trend-Hashtags sind oft keine Produkte (#fyp, #fußball). Claude entscheidet, ob ein Hashtag ein Produkt ist, und leitet einen Suchbegriff ab. Im Mock-Modus übernimmt eine Heuristik (Zerlegung in bekannte Produktwörter).
+
+**1688-Suchbegriffe:** 1688 findet nur mit chinesischen Suchbegriffen etwas. Claude übersetzt das Keyword. Ohne Claude-Key wird 1688 im Live-Modus übersprungen.
+
+**Risiken, die ihr bewusst tragt:**
+- Die Nutzungsbedingungen von TikTok und 1688 untersagen automatisiertes Auslesen. Das Scraping führt Apify aus, die Daten nutzt ihr. Das Risiko ist vor allem vertraglich (Sperre, Unterlassung). Wir greifen nur auf öffentliche Seiten ohne Login zu.
+- **Datenschutz:** Die Hashtag-Daten enthalten Creator-Namen (personenbezogen). Diese werden **vor dem Speichern entfernt**.
+- Actor-Ausgaben können sich ohne Vorwarnung ändern. Die Adapter lesen die Felder tolerant und melden Strukturfehler im Lauf.
+
+**Nicht in diesem Schritt:** Bildähnlichkeit (1688 ↔ AliExpress verknüpfen), TikTok-Top-Ads als Werbedaten für GB. Beides steht als nächster Ausbauschritt an.

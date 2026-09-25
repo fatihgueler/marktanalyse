@@ -58,6 +58,9 @@ export async function getCandidates(runId: string, filters: CandidateFilters) {
     },
     // Kandidaten unter der Mindestmarge immer nach unten, danach gewählte Sortierung.
     orderBy: [{ belowMinMargin: "asc" }, ORDER_BY[filters.sort], { totalScore: "desc" }],
+    // Dasselbe Produkt kann über mehrere Keywords kommen (z. B. „wolkenlampe“ via Google, „cloud lamp“
+    // via TikTok) – pro Produkt und Land nur der bestplatzierte Eintrag.
+    distinct: ["productId", "country"],
     take: CANDIDATE_LIMIT,
     include: {
       product: { select: { title: true, url: true, imageUrl: true, source: true } },

@@ -1,4 +1,4 @@
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import type { MarginBreakdown as MarginData } from "@/scoring/margin";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +31,30 @@ function Line({ label, amount, currency, hint, sign, strong, muted }: LineProps)
 export function MarginBreakdown({ margin, referenceSourceLabel }: { margin: MarginData; referenceSourceLabel: string }) {
   const c = margin.currency;
   const vatModeLabel = margin.vatMode === "kleinunternehmer" ? "Kleinunternehmer" : "regelbesteuert";
+  const w = margin.wholesale;
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      {w ? (
+        <section aria-labelledby="landed-titel" className="rounded-xl border bg-card p-4 text-sm">
+          <h3 id="landed-titel" className="mb-2 flex items-baseline justify-between gap-2 font-semibold">
+            Stückkosten bis zum Kunden
+            <span className="font-mono text-[11px] font-normal text-muted-foreground">Großhandel · Los {formatNumber(w.lotSize)} Stück</span>
+          </h3>
+          <Line
+            label="Einkauf"
+            amount={margin.purchase}
+            currency={c}
+            hint={`Staffel ab ${formatNumber(w.tierMinQty)} Stück: ${formatNumber(w.tierUnitPrice, 2)} ${w.tierCurrency}`}
+          />
+          <Line label="Agentengebühr" amount={w.agentFee} currency={c} sign="+" hint="Einkauf, Kontrolle, Konsolidierung" />
+          <Line label="Luftfracht nach DE" amount={w.freight} currency={c} sign="+" hint={`${formatNumber(w.weightKg, 2)} kg ${w.weightSource === "config" ? "(Annahme)" : "(laut Quelle)"}`} />
+          <Line label="Zoll" amount={margin.duty} currency={c} sign="+" hint={margin.dutyRule} />
+          <Line label="Einfuhrumsatzsteuer" amount={margin.importVat} currency={c} sign="+" hint={margin.importVatRule} />
+          <Line label="Verzollung (anteilig)" amount={margin.clearanceFee} currency={c} sign="+" />
+          <Line label="Versand an Kunde" amount={w.lastMile} currency={c} sign="+" hint={`ab Lager in ${w.importCountry}`} />
+          <Line label="Stückkosten" amount={margin.landedCost} currency={c} sign="=" strong />
+        </section>
+      ) : (
       <section aria-labelledby="landed-titel" className="rounded-xl border bg-card p-4 text-sm">
         <h3 id="landed-titel" className="mb-2 font-semibold">Landed Cost je Stück</h3>
         <Line label="Einkauf" amount={margin.purchase} currency={c} hint="Lieferantenpreis, umgerechnet" />
@@ -42,6 +64,7 @@ export function MarginBreakdown({ margin, referenceSourceLabel }: { margin: Marg
         {margin.clearanceFee > 0 ? <Line label="Abfertigung" amount={margin.clearanceFee} currency={c} sign="+" /> : null}
         <Line label="Landed Cost" amount={margin.landedCost} currency={c} sign="=" strong />
       </section>
+      )}
 
       <section aria-labelledby="marge-titel" className="rounded-xl border bg-card p-4 text-sm">
         <h3 id="marge-titel" className="mb-2 flex items-baseline justify-between gap-2 font-semibold">

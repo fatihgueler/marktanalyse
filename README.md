@@ -71,6 +71,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `META_ACCESS_TOKEN` | nein | Meta Ad Library API, langlebiger Token (60 Tage). Leer → Demo-Modus. |
 | `META_APP_ID`, `META_APP_SECRET` | nein | Nur für die Warnung, bevor der Meta-Token abläuft |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
+| `APIFY_TOKEN` | nein | Scraping-Dienst [Apify](https://apify.com) für TikTok Creative Center und 1688. Leer → Demo-Modus. **Siehe Abschnitt „Scraping“.** |
 
 Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
 
@@ -101,6 +102,31 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 8. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
 
 Hinweis zur Live-Anbindung: Die Adapter für SerpApi und AliExpress sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet**. Beim ersten Live-Lauf lohnt ein Blick in die Fehlerliste des Laufs (Ausgabe von `collect` und `Run.errors`).
+
+## Scraping (Phase 2b)
+
+Weil viele offizielle APIs nicht zu bekommen sind, bindet der Radar zwei Quellen per **Scraping** ein. Das war eine bewusste Entscheidung und hebt die ursprüngliche Grenze „kein Scraping“ auf.
+
+| Quelle | Rolle | Länder | Apify-Actor (Config `scraping.*.actorId`) |
+|---|---|---|---|
+| TikTok Creative Center, Trend-Hashtags | Trendquelle: Hashtag-Popularität der letzten 120 Tage | DE, GB | `memo23~tiktok-trending-hashtags-scraper` |
+| 1688.com Produktsuche | Einkaufsquelle mit Großhandels-Kalkulation | DE, AT (Lager in DE) | `songd~1688-search-scraper` |
+
+**So funktioniert es**
+- Das Scraping führt der Datendienst **Apify** aus. Es gibt keine eigenen Scraper und keinen Code, der Bot-Schutz umgeht. Aufruf über die Apify-REST-API, keine zusätzliche Abhängigkeit.
+- **TikTok:** Viele Trend-Hashtags sind keine Produkte (#fyp, #fußball). Claude wählt die Produkt-Hashtags aus und macht daraus einen Suchbegriff (#cloudlamp → „cloud lamp“). Ohne Claude übernimmt eine Heuristik. Die Popularitätskurve wird zu Wochenwerten verdichtet und wie Google Trends bewertet. Liefern Google und TikTok dasselbe Keyword, wird es nur einmal verarbeitet.
+- **1688:** Claude übersetzt das Keyword ins Chinesische; ohne `ANTHROPIC_API_KEY` wird 1688 im Live-Modus übersprungen. Die Marge rechnet mit **Großhandel**: Staffelpreis bei der Losgröße (Config `wholesale.lotSize`, mindestens die Mindestbestellmenge), Agentengebühr, Luftfracht nach Gewicht, regulärer Zoll (die Sammelsendung liegt über 150 €), EUSt bei Einfuhr nach DE, anteilige Verzollung und Versand vom Lager an den Kunden. Alle Werte stehen in `radar.config.ts` unter `wholesale`.
+- In der Rangliste erscheint dasselbe Produkt pro Land nur einmal, auch wenn es über mehrere Keywords gefunden wurde.
+
+**Kosten**
+- Jeder Actor-Lauf hat eine **harte Kostengrenze** (`maxTotalChargeUsd`, Config `scraping.*.maxChargeUsd`). Es gibt **keine automatischen Wiederholungen**, weil jeder Versuch kostet.
+- Der 1688-Actor verlangt zusätzlich eine Monatsmiete (laut Actor-Seite ca. 30 $). Beide Actors müsst ihr in Apify einmal abonnieren.
+- Der `--live`-Schutz gilt auch hier: `npm run collect` zeigt vor dem Start die geschätzten Kosten.
+
+**Risiken, die ihr bewusst tragt**
+- Die **Nutzungsbedingungen** von TikTok und 1688 untersagen automatisiertes Auslesen. Das Risiko ist vor allem vertraglich (Sperre, Abmahnung). Genutzt werden nur öffentliche Seiten ohne Login.
+- **Datenschutz:** Die TikTok-Daten enthalten Creator-Namen. Diese werden **vor dem Speichern entfernt**; gespeichert werden nur Hashtag, Rang, Reichweite und Kurve.
+- **Stabilität:** Actor-Ausgaben können sich ohne Vorwarnung ändern. Die Adapter lesen tolerant und melden „Ausgabeformat hat sich geändert“ als Fehler im Lauf. Die Adapter wurden **nicht gegen echte Actor-Ausgaben getestet**, weil kein Token vorhanden war. Beim ersten Live-Lauf also die Fehlerliste prüfen.
 
 ## Zentrale Config: `src/config/radar.config.ts`
 
@@ -144,8 +170,10 @@ Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch
 src/
 ├── config/        radar.config.ts (alle Annahmen), Validierung + Config-Version
 ├── sources/       Adapter-Interfaces, Registry, Google Trends, AliExpress, Google Shopping,
-│                  Werbebibliotheken (ads/: Meta, TikTok), Mock-Katalog
-├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik
+│                  Werbebibliotheken (ads/: Meta, TikTok), Scraping (scraping/: Apify,
+│                  TikTok Creative Center, 1688), Mock-Katalog
+├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik,
+│                  Hashtag-Klassifizierung, Übersetzung für 1688
 ├── scoring/       trend, margin, competition, ads, score, calibration (+ Tests)
 ├── jobs/          collect.ts
 ├── lib/           db, env, auth, Formatierung, Queries
@@ -156,7 +184,7 @@ prisma/            schema.prisma, Migrationen
 
 Eine neue Quelle implementiert `TrendSource`, `SupplySource`, `PriceSource` oder `AdSignalSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen.
 
-**Offen aus Phase 2:** 1688.com ist nicht angebunden. Offizielle API-Zugänge gibt es nur für Firmen mit chinesischer Gewerbeanmeldung oder über einen Einkaufsagenten mit 1688-Zugang; bezahlte Datendienste legen ihre Datenherkunft nicht offen. Sobald ein offizieller Zugang da ist, kommt 1688 als weitere `SupplySource` dazu (Details in `PLAN-PHASE2.md`). TikTok Creative Center hat keine offizielle API und wird nicht angebunden.
+**Offen:** Bildähnlichkeit, um dasselbe Produkt auf 1688 und AliExpress zu verknüpfen (Beschaffungswege nebeneinander), und TikTok-Top-Ads als Werbedaten auch für GB. Beides ist in `PLAN-PHASE2.md` beschrieben.
 
 ## Bekannte Punkte
 

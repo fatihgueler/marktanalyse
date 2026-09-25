@@ -18,6 +18,7 @@ const envSchema = z.object({
   META_APP_SECRET: optionalSecret,
   TIKTOK_CLIENT_KEY: optionalSecret,
   TIKTOK_CLIENT_SECRET: optionalSecret,
+  APIFY_TOKEN: optionalSecret,
 });
 
 export type CollectEnv = z.infer<typeof envSchema>;
