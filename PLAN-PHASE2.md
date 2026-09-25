@@ -1,6 +1,6 @@
 # PLAN – Trend-Radar Phase 2
 
-Status: **Entwurf, wartet auf Freigabe.** Ganz unten stehen die offenen Entscheidungen (F1–F4).
+Status: **Freigegeben mit Entscheidungen F1–F4** (siehe Abschnitt 8).
 
 ---
 
@@ -176,3 +176,19 @@ Nach jedem Meilenstein: Commit, Push, „✅ …“.
 **F3 – Werbedruck im Score:** Einverstanden, dass Werbedruck mit Gewicht in den Wettbewerbs-Score eingeht, die Marktdynamik aber erst nur angezeigt wird, bis Kalibrierungsdaten vorliegen?
 
 **F4 – Drop-Feedback (2e):** Mit umsetzen? Es ist die Grundlage dafür, dass die Gewichte irgendwann auf euren echten Ergebnissen beruhen statt auf meinen Startwerten.
+
+---
+
+## 8. Entscheidungen (freigegeben)
+
+- **F1 → (c):** 1688 vorerst weglassen. Die Schnittstelle `SupplySource` ist bereits vorhanden; es entstehen **keine** Tabellen `WholesaleTerms`/`ProductLink` und keine Bildähnlichkeit, bis es eine zweite Einkaufsquelle gibt.
+- **F2:** TikTok-Adapter bauen, Mock sofort, live nach Zulassung.
+- **F3:** Werbedruck gewichtet im Wettbewerb, Marktdynamik nur anzeigen.
+- **F4:** Drop-Feedback und `/kalibrierung` umsetzen.
+
+Damit reduziert sich die Migration auf die neuen Tabellen `AdSignal` und `DropOutcome`. Meilenstein 4 (1688) entfällt.
+
+Technische Details aus der Doku:
+- Meta: `GET https://graph.facebook.com/v26.0/ads_archive` mit `search_terms`, `ad_reached_countries=["DE"]`, `ad_type=ALL`, `ad_active_status=ACTIVE`, `search_type=KEYWORD_EXACT_PHRASE`, Feldern `id,page_id,page_name,ad_delivery_start_time,ad_snapshot_url`.
+- TikTok: Client-Token über `POST https://open.tiktokapis.com/v2/oauth/token/` (`grant_type=client_credentials`, 2 h gültig); Anzeigen über `POST https://open.tiktokapis.com/v2/research/adlib/ad/query/` mit `filters` (Zeitraum, Länder, Status), `search_term`, `search_type`, `max_count` ≤ 10, Paging über `search_id`.
+- Beide Bibliotheken decken nicht-politische Anzeigen nur für die **EU** ab → Werbedaten gibt es für **DE und AT**, nicht für CH und GB.

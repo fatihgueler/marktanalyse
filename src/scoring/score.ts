@@ -1,5 +1,6 @@
 import { radarConfig, type RadarConfig } from "@/config/radar.config";
 import { clamp } from "@/lib/stats";
+import type { AdsBreakdown } from "./ads";
 import type { CompetitionBreakdown } from "./competition";
 import type { MarginBreakdown } from "./margin";
 import type { TrendBreakdown } from "./trend";
@@ -48,4 +49,6 @@ export interface CandidateBreakdown {
   competition: CompetitionBreakdown;
   score: ScoreBreakdown;
   referencePrice: { source: string; sampleSize: number | null; originalPrice: number; originalCurrency: string };
+  /** Werbeaktivität (Phase 2); fehlt bei Snapshots aus Läufen vor Phase 2 */
+  ads?: AdsBreakdown;
 }

@@ -96,3 +96,37 @@ export interface PriceSource extends SourceBase {
   /** null, wenn zu wenige Treffer – dann greift der Multiplikator-Fallback */
   referencePrice(keyword: string, country: Country): Promise<PriceRecord | null>;
 }
+
+// ── Werbeaktivität (Phase 2) ─────────────────────────────────────────────
+
+export interface AdSample {
+  advertiser: string;
+  startedAt: string;
+  /** Link zur Vorschau in der Werbebibliothek */
+  previewUrl: string | null;
+}
+
+export interface AdRecord extends SourceRecord {
+  keyword: string;
+  /** false = Quelle deckt dieses Land nicht ab (z. B. Meta in GB/CH); alle Zahlen sind dann 0 */
+  coverage: boolean;
+  /** aktive Anzeigen zum Suchbegriff (gedeckelt durch ads.maxAdsPerKeyword) */
+  activeAds: number;
+  /** verschiedene Werbetreibende (Seiten/Accounts) */
+  advertisers: number;
+  /** true, wenn die Obergrenze erreicht wurde – die echten Zahlen sind dann höher */
+  capped: boolean;
+  /** neu gestartete Anzeigen je Woche, älteste zuerst */
+  newAdsPerWeek: { weekStart: string; count: number }[];
+  /** frühestes Startdatum einer gefundenen aktiven Anzeige, YYYY-MM-DD */
+  firstSeen: string | null;
+  samples: AdSample[];
+}
+
+/**
+ * Werbebibliotheken (Meta Ad Library, TikTok Commercial Content API) liefern keine
+ * Suchinteresse-Kurve, sondern Werbeaktivität – deshalb ein eigenes Interface statt `TrendSource`.
+ */
+export interface AdSignalSource extends SourceBase {
+  adActivity(keyword: string, country: Country): Promise<AdRecord>;
+}

@@ -344,7 +344,13 @@ export const radarConfig = {
     resultCountLogCap: 5,
     /** log10(1 + Σ Bestellungen/30 Tage der Top-Treffer), bei dem die Volumen-Sättigung 1 erreicht */
     ordersLogCap: 5,
-    weights: { results: 0.5, orders: 0.5 },
+    /**
+     * log10(1 + Werbetreibende), bei dem der Werbedruck 1 erreicht (2 ≈ 100 Werbetreibende).
+     * ANNAHME: Ab ~100 aktiven Werbetreibenden für einen Suchbegriff ist der Markt gesättigt.
+     */
+    advertisersLogCap: 2,
+    // ANNAHME: Werbedruck ist der direkteste Beleg für westliche Konkurrenz und zählt daher am meisten.
+    weights: { results: 0.25, orders: 0.25, advertisers: 0.5 },
   },
 
   // ANNAHME: Startgewichte – Früherkennung zählt am meisten, Wettbewerb ist in Phase 1 nur ein grober Proxy.
@@ -352,6 +358,27 @@ export const radarConfig = {
     weights: { trend: 0.5, margin: 0.35, competition: 0.15 },
     /** Relevanz wirkt als Faktor: 1 = linear, > 1 bestraft unsichere Matches stärker */
     relevanceExponent: 1,
+  },
+
+  ads: {
+    /**
+     * Länder, für die Werbebibliotheken nicht-politische Anzeigen liefern.
+     * Meta und TikTok zeigen diese nur für die EU (Transparenzpflicht nach DSA) → CH und GB fehlen.
+     */
+    coveredCountries: ["DE", "AT"] as Country[],
+    /**
+     * Höchstzahl Anzeigen, die je Keyword/Land gelesen werden (Kostengrenze, zugleich Zähl-Obergrenze).
+     * Meta liefert 50 je Seite, TikTok nur 10 – TikTok daher niedriger, um das Tageskontingent zu schonen.
+     */
+    maxAdsPerKeyword: { meta: 100, tiktok: 30 },
+    /** Wochen, für die neue Anzeigen je Woche gezählt werden (Marktdynamik) */
+    momentumWeeks: 8,
+    /** Zeitraum der TikTok-Abfrage nach Veröffentlichungsdatum */
+    lookbackDays: 365,
+    /** Beispiel-Anzeigen, die im Dashboard verlinkt werden */
+    samplesPerKeyword: 5,
+    /** ANNAHME: Graph-API-Version Stand September 2026 */
+    metaGraphVersion: "v26.0",
   },
 
   collect: {

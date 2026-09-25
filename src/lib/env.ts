@@ -13,6 +13,11 @@ const envSchema = z.object({
   ALIEXPRESS_TRACKING_ID: optionalSecret,
   ANTHROPIC_API_KEY: optionalSecret,
   ANTHROPIC_MODEL: optionalSecret.transform((value) => value ?? "claude-opus-5"),
+  META_ACCESS_TOKEN: optionalSecret,
+  META_APP_ID: optionalSecret,
+  META_APP_SECRET: optionalSecret,
+  TIKTOK_CLIENT_KEY: optionalSecret,
+  TIKTOK_CLIENT_SECRET: optionalSecret,
 });
 
 export type CollectEnv = z.infer<typeof envSchema>;

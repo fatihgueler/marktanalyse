@@ -9,11 +9,15 @@ export interface CompetitionInput {
   resultCount: number | null;
   /** Summe der Bestellungen/30 Tage der Top-Treffer (Nachfrage-Sättigung) */
   orders30dSum: number | null;
+  /** Werbetreibende laut Werbebibliotheken; null = Land nicht abgedeckt (CH, GB) */
+  advertisers: number | null;
 }
 
 export interface CompetitionBreakdown extends CompetitionInput {
   resultsSaturation: number;
   ordersSaturation: number;
+  /** Werbedruck 0..1 */
+  advertisersSaturation: number;
   saturation: number;
   weights: RadarConfig["competition"]["weights"];
   /** 0..1, 1 = wenig Wettbewerb */
@@ -26,8 +30,8 @@ function logSaturation(value: number | null, logCap: number): number {
 }
 
 /**
- * Wettbewerbs-Proxy (Phase 1): Viele Anbieter und viele Bestellungen auf AliExpress bedeuten,
- * dass das Produkt breit verfügbar ist – im Westen ist dann meist schon Konkurrenz aktiv.
+ * Wettbewerb aus drei Signalen: Anbieterzahl und Bestellvolumen auf AliExpress (breite Verfügbarkeit)
+ * sowie Werbedruck – wie viele Shops das Produkt im Zielland bereits bewerben.
  */
 export function scoreCompetition(
   input: CompetitionInput,
@@ -35,6 +39,12 @@ export function scoreCompetition(
 ): CompetitionBreakdown {
   const resultsSaturation = logSaturation(input.resultCount, config.resultCountLogCap);
   const ordersSaturation = logSaturation(input.orders30dSum, config.ordersLogCap);
-  const saturation = clamp(config.weights.results * resultsSaturation + config.weights.orders * ordersSaturation, 0, 1);
-  return { ...input, resultsSaturation, ordersSaturation, saturation, weights: config.weights, score: 1 - saturation };
+  const advertisersSaturation = logSaturation(input.advertisers, config.advertisersLogCap);
+  const { weights } = config;
+  const saturation = clamp(
+    weights.results * resultsSaturation + weights.orders * ordersSaturation + weights.advertisers * advertisersSaturation,
+    0,
+    1,
+  );
+  return { ...input, resultsSaturation, ordersSaturation, advertisersSaturation, saturation, weights, score: 1 - saturation };
 }

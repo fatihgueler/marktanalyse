@@ -42,6 +42,7 @@ model Run {
   supplyOffers    SupplyOffer[]
   referencePrices ReferencePrice[]
   candidates      CandidateSnapshot[]
+  adSignals       AdSignal[]
 
   @@index([startedAt])
 }
@@ -77,9 +78,10 @@ model SupplyProduct {
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @updatedAt
 
-  offers     SupplyOffer[]
-  candidates CandidateSnapshot[]
-  judgments  MatchJudgment[]
+  offers       SupplyOffer[]
+  candidates   CandidateSnapshot[]
+  judgments    MatchJudgment[]
+  dropOutcomes DropOutcome[]
 
   @@unique([source, externalId])
 }
@@ -178,7 +180,62 @@ model CandidateSnapshot {
   /// vollständiger Rechenweg aller Teil-Scores
   breakdown Json
 
+  dropOutcomes DropOutcome[]
+
   @@unique([runId, productId, country, keyword])
   @@index([runId, totalScore])
+  @@index([productId, country])
+}
+
+/// Werbeaktivität zu einem Keyword in einem Land (Phase 2: Meta Ad Library, TikTok).
+model AdSignal {
+  id            String   @id @default(cuid())
+  runId         String
+  run           Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source        String
+  country       Country
+  keyword       String
+  /// false = Quelle deckt das Land nicht ab
+  coverage      Boolean
+  activeAds     Int
+  advertisers   Int
+  /// Obergrenze erreicht – echte Zahlen sind höher
+  capped        Boolean
+  /// [{ weekStart, count }], älteste zuerst
+  newAdsPerWeek Json
+  firstSeen     String?
+  /// [{ advertiser, startedAt, previewUrl }]
+  samples       Json
+  fetchedAt     DateTime
+  raw           Json
+
+  @@unique([runId, source, country, keyword])
+  @@index([keyword, country])
+}
+
+enum DropVerdict {
+  TOP
+  OK
+  FLOP
+}
+
+/// Ergebnis eines echten Drops – Grundlage für die Kalibrierung der Gewichte.
+model DropOutcome {
+  id                  String             @id @default(cuid())
+  productId           String
+  product             SupplyProduct      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Snapshot, auf dessen Basis entschieden wurde (Scores zum Drop-Zeitpunkt)
+  candidateSnapshotId String?
+  candidateSnapshot   CandidateSnapshot? @relation(fields: [candidateSnapshotId], references: [id], onDelete: SetNull)
+  country             Country
+  keyword             String
+  droppedAt           DateTime
+  unitsSold           Int?
+  /// 0..1
+  returnRate          Float?
+  verdict             DropVerdict
+  note                String?
+  createdAt           DateTime           @default(now())
+
   @@index([productId, country])
 }

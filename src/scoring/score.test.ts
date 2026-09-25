@@ -22,7 +22,7 @@ const margin = calculateMargin(
   },
   config,
 );
-const competition = scoreCompetition({ resultCount: 999, orders30dSum: 99 }, config.competition);
+const competition = scoreCompetition({ resultCount: 999, orders30dSum: 99, advertisers: 9 }, config.competition);
 
 describe("totalScore", () => {
   it("gewichtet die Teil-Scores und skaliert auf 0..100 (Handrechnung)", () => {

@@ -16,16 +16,20 @@ import { readCollectEnv } from "@/lib/env";
 import { round } from "@/lib/stats";
 import { createJudge, matchProducts, type JudgmentCache } from "@/matching/match";
 import type { Judgment, MatchJudge } from "@/matching/types";
+import { combineAdSignals } from "@/scoring/ads";
 import { scoreCompetition } from "@/scoring/competition";
 import { calculateMargin, fallbackReferencePrice } from "@/scoring/margin";
 import { totalScore, type CandidateBreakdown } from "@/scoring/score";
 import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
+import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
-import type { DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
+import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
 loadDotenv({ quiet: true });
 
 interface RunError {
+  /** Warnungen (z. B. Token läuft bald ab) machen einen Lauf nicht PARTIAL */
+  level?: "fehler" | "warnung";
   source: string;
   country?: Country;
   keyword?: string;
@@ -42,6 +46,8 @@ interface RunContext {
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
+/** Ab so vielen Resttagen warnt der Lauf, dass der Meta-Token erneuert werden muss */
+const META_TOKEN_WARN_DAYS = 10;
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // ── Kostenschutz ─────────────────────────────────────────────────────────
@@ -58,6 +64,15 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   }
   if (modes.aliexpress === "live") {
     lines.push(`AliExpress Affiliate API: bis zu ${countries * maxKeywordsPerCountry} Anfragen`);
+  }
+  const adCountries = radarConfig.ads.coveredCountries.length;
+  if (modes["meta-ad-library"] === "live") {
+    const pages = Math.ceil(radarConfig.ads.maxAdsPerKeyword.meta / 50);
+    lines.push(`Meta Ad Library: bis zu ${adCountries * maxKeywordsPerCountry * pages} Anfragen (kostenlos, aber Rate-Limit)`);
+  }
+  if (modes["tiktok-ads"] === "live") {
+    const pages = Math.ceil(radarConfig.ads.maxAdsPerKeyword.tiktok / 10);
+    lines.push(`TikTok Ad Library: bis zu ${adCountries * maxKeywordsPerCountry * pages} Anfragen (Tageskontingent)`);
   }
   if (modes.claude === "live") {
     lines.push(`Claude (${process.env.ANTHROPIC_MODEL ?? "Standardmodell"}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
@@ -203,6 +218,38 @@ async function fetchReferencePrice(ctx: RunContext, keyword: string, country: Co
   }
 }
 
+async function fetchAdSignals(ctx: RunContext, keyword: string, country: Country): Promise<AdRecord[]> {
+  const results = await Promise.all(
+    ctx.sources.ads.map(async (source) => {
+      try {
+        const record = await source.adActivity(keyword, country);
+        await ctx.db.adSignal.create({
+          data: {
+            runId: ctx.runId,
+            source: record.source,
+            country,
+            keyword,
+            coverage: record.coverage,
+            activeAds: record.activeAds,
+            advertisers: record.advertisers,
+            capped: record.capped,
+            newAdsPerWeek: asJson(record.newAdsPerWeek),
+            firstSeen: record.firstSeen,
+            samples: asJson(record.samples),
+            fetchedAt: record.fetchedAt,
+            raw: asJson(record.raw),
+          },
+        });
+        return record;
+      } catch (error) {
+        ctx.errors.push({ source: source.id, country, keyword, message: errorMessage(error) });
+        return null;
+      }
+    }),
+  );
+  return results.filter((r): r is AdRecord => r !== null);
+}
+
 async function processKeyword(ctx: RunContext, supply: SupplySource, demand: ScoredDemand, country: Country): Promise<void> {
   const keyword = demand.record.keyword;
   let offers: SupplyRecord[];
@@ -216,7 +263,8 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
   ctx.stats.offers += offers.length;
 
   const stored = await storeOffers(ctx, offers, country);
-  const reference = await fetchReferencePrice(ctx, keyword, country);
+  const [reference, adRecords] = await Promise.all([fetchReferencePrice(ctx, keyword, country), fetchAdSignals(ctx, keyword, country)]);
+  const ads = combineAdSignals(adRecords);
 
   const productIds = new Map(stored.map((s) => [s.offer.externalId, s.productId]));
   const match = await matchProducts(
@@ -235,6 +283,7 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
   const competition = scoreCompetition({
     resultCount: offers[0]?.resultCount ?? null,
     orders30dSum: orders.length > 0 ? orders.reduce((a, b) => a + b, 0) : null,
+    advertisers: ads.advertisers,
   });
 
   for (const { offer, productId, offerId } of stored) {
@@ -268,6 +317,7 @@ async function processKeyword(ctx: RunContext, supply: SupplySource, demand: Sco
         originalPrice: referencePrice,
         originalCurrency: referenceCurrency,
       },
+      ads,
     };
 
     await ctx.db.candidateSnapshot.create({
@@ -354,6 +404,18 @@ async function main(): Promise<number> {
     }
   }
 
+  const warnings: RunError[] = [];
+  if (modes["meta-ad-library"] === "live" && env.META_ACCESS_TOKEN && env.META_APP_ID && env.META_APP_SECRET) {
+    try {
+      const daysLeft = await metaTokenDaysLeft(env.META_ACCESS_TOKEN, env.META_APP_ID, env.META_APP_SECRET);
+      if (daysLeft !== null && daysLeft < META_TOKEN_WARN_DAYS) {
+        warnings.push({ level: "warnung", source: "meta-ad-library", message: `Meta-Token läuft in ${daysLeft} Tagen ab – bitte erneuern.` });
+      }
+    } catch (error) {
+      warnings.push({ level: "warnung", source: "meta-ad-library", message: `Token-Prüfung fehlgeschlagen: ${errorMessage(error)}` });
+    }
+  }
+
   const db = getDb();
   const run = await db.run.create({ data: { sourceModes: modes, configVersion: configVersion() } });
   const ctx: RunContext = {
@@ -361,7 +423,7 @@ async function main(): Promise<number> {
     runId: run.id,
     sources,
     judge,
-    errors: [],
+    errors: [...warnings],
     stats: { keywords: 0, qualified: 0, offers: 0, candidates: 0 },
   };
 
@@ -371,7 +433,8 @@ async function main(): Promise<number> {
       await collectCountry(ctx, country);
       console.log(`  ${country}: fertig`);
     }
-    if (ctx.errors.length > 0) status = ctx.stats.candidates > 0 ? "PARTIAL" : "FAILED";
+    const realErrors = ctx.errors.filter((e) => e.level !== "warnung");
+    if (realErrors.length > 0) status = ctx.stats.candidates > 0 ? "PARTIAL" : "FAILED";
   } catch (error) {
     status = "FAILED";
     ctx.errors.push({ source: "collect", message: errorMessage(error) });
@@ -386,9 +449,9 @@ async function main(): Promise<number> {
   console.log(`\nLauf ${run.id}: ${status}`);
   console.log(`  ${keywords} Keywords, ${qualified} mit Trend-Dynamik, ${offers} Angebote, ${candidates} Kandidaten`);
   if (ctx.errors.length > 0) {
-    console.log(`  ${ctx.errors.length} Fehler:`);
+    console.log(`  ${ctx.errors.length} Meldungen:`);
     for (const e of ctx.errors.slice(0, 10)) {
-      console.log(`    - [${e.source}${e.country ? `/${e.country}` : ""}${e.keyword ? ` „${e.keyword}“` : ""}] ${e.message}`);
+      console.log(`    - ${e.level === "warnung" ? "Warnung " : ""}[${e.source}${e.country ? `/${e.country}` : ""}${e.keyword ? ` „${e.keyword}“` : ""}] ${e.message}`);
     }
   }
   await printTopCandidates(db, run.id);
