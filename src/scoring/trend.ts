@@ -12,7 +12,7 @@ export interface TrendBreakdown {
   growth: number;
   /** Wachstums-Komponente 0..1 */
   growthComponent: number;
-  /** Frühphasen-Komponente 0..1 (1 = kaum Vorgeschichte) */
+  /** Frühphasen-Komponente 0..1 (1 = kaum Vorgeschichte), 0 wenn das Interesse nicht steigt */
   earlyComponent: number;
   /** Niveau-Komponente 0..1 */
   levelComponent: number;
@@ -47,7 +47,9 @@ export function scoreTrend(values: readonly number[], config: RadarConfig["trend
   const growth = (recent - previous) / Math.max(previous, config.growthFloor);
   // Sättigende Funktion: Verdopplung ≈ 0,5, Verzehnfachung ≈ 0,9 – Ausreißer dominieren nicht.
   const growthComponent = growth <= 0 ? 0 : growth / (growth + config.growthHalfSaturation);
-  const earlyComponent = 1 - clamp(baseline / config.earlyBaselineCap, 0, 1);
+  // Frühphase zählt nur bei steigendem Interesse – ein bereits abflauendes Strohfeuer hat zwar
+  // wenig Vorgeschichte, ist für einen Drop aber schon zu spät.
+  const earlyComponent = growth > 0 ? 1 - clamp(baseline / config.earlyBaselineCap, 0, 1) : 0;
   const levelComponent = clamp(recent / 100, 0, 1);
 
   let rejectedReason: string | null = null;

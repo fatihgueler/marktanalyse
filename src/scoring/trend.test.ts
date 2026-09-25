@@ -40,6 +40,13 @@ describe("scoreTrend", () => {
     expect(result.growthComponent).toBe(0);
   });
 
+  it("gibt einem abflauenden Strohfeuer keinen Frühphasen-Bonus", () => {
+    // kaum Vorgeschichte, Peak in der Vorperiode, jetzt fallend
+    const result = scoreTrend(series(1, 90, 30), config);
+    expect(result.earlyComponent).toBe(0);
+    expect(result.score).toBeCloseTo(0.1 * 0.3); // nur Niveau-Anteil
+  });
+
   it("verhindert Division durch ~0 über den growthFloor", () => {
     const result = scoreTrend(series(0, 0, 20), config);
     expect(result.growth).toBeCloseTo(4); // (20 − 0) / 5
