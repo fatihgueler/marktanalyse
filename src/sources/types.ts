@@ -92,6 +92,8 @@ export interface PriceTier {
 }
 
 export interface SupplySource extends SourceBase {
+  /** Kostenbremse: höchstens so viele Suchen je Land und Lauf (die Keywords mit dem höchsten Trend-Score zuerst) */
+  readonly maxSearchesPerCountry?: number;
   search(keyword: string, shipTo: Country, limit: number): Promise<SupplyRecord[]>;
 }
 
@@ -106,6 +108,8 @@ export interface PriceRecord extends SourceRecord {
 }
 
 export interface PriceSource extends SourceBase {
+  /** Kostenbremse: höchstens so viele Abfragen je Land und Lauf */
+  readonly maxLookupsPerCountry?: number;
   /** null, wenn zu wenige Treffer – dann greift der Multiplikator-Fallback */
   referencePrice(keyword: string, country: Country): Promise<PriceRecord | null>;
 }

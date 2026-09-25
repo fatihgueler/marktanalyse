@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { effortOption } from "./claude-options";
 import { CATEGORY_IDS, radarConfig, type Country, type RadarConfig } from "@/config/radar.config";
 import type { CollectEnv } from "@/lib/env";
 import type { SourceMode } from "@/sources/types";
@@ -108,7 +109,7 @@ export class ClaudeHashtagClassifier implements HashtagClassifier {
       messages: [{ role: "user", content: `Land: ${country}\nHashtags:\n${hashtags.map((h) => `#${h}`).join("\n")}` }],
       output_config: {
         format: zodOutputFormat(classificationSchema),
-        ...(this.config.matching.effort ? { effort: this.config.matching.effort } : {}),
+        ...effortOption(this.model, this.config),
       },
     });
     if (response.stop_reason === "refusal" || !response.parsed_output) {

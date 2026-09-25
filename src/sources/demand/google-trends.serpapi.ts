@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { radarConfig, type Country } from "@/config/radar.config";
 import { isoDate } from "@/lib/weeks";
+import type { SearchBudget } from "../budget";
 import { Throttle, fetchJson } from "../http";
 import type { DemandRecord, DiscoveredKeyword, TrendSource } from "../types";
 
@@ -36,7 +37,10 @@ export class GoogleTrendsSerpApiSource implements TrendSource {
   readonly mode = "live" as const;
   private readonly throttle = new Throttle();
 
-  constructor(private readonly apiKey: string) {}
+  constructor(
+    private readonly apiKey: string,
+    private readonly budget: SearchBudget,
+  ) {}
 
   private url(params: Record<string, string>): string {
     const search = new URLSearchParams({ engine: "google_trends", api_key: this.apiKey, ...params });
@@ -47,6 +51,8 @@ export class GoogleTrendsSerpApiSource implements TrendSource {
     const profile = radarConfig.countries[country];
     const found = new Map<string, DiscoveredKeyword>();
     for (const seed of seeds) {
+      // Budget erschöpft: mit den bisher gefundenen Keywords weiterarbeiten statt abzubrechen
+      if (!this.budget.tryTake()) break;
       const json = await fetchJson<unknown>(
         this.url({
           q: seed,
@@ -71,6 +77,7 @@ export class GoogleTrendsSerpApiSource implements TrendSource {
 
   async fetchSeries(keyword: string, seedTerm: string | null, country: Country): Promise<DemandRecord | null> {
     const profile = radarConfig.countries[country];
+    this.budget.take();
     const json = await fetchJson<unknown>(
       this.url({
         q: keyword,

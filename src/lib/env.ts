@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_CLAUDE_MODEL } from "@/matching/claude-options";
 
 const optionalSecret = z
   .string()
@@ -12,7 +13,7 @@ const envSchema = z.object({
   ALIEXPRESS_APP_SECRET: optionalSecret,
   ALIEXPRESS_TRACKING_ID: optionalSecret,
   ANTHROPIC_API_KEY: optionalSecret,
-  ANTHROPIC_MODEL: optionalSecret.transform((value) => value ?? "claude-opus-5"),
+  ANTHROPIC_MODEL: optionalSecret.transform((value) => value ?? DEFAULT_CLAUDE_MODEL),
   META_ACCESS_TOKEN: optionalSecret,
   META_APP_ID: optionalSecret,
   META_APP_SECRET: optionalSecret,

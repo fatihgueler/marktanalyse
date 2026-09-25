@@ -67,7 +67,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `ALIEXPRESS_APP_SECRET` | nein | App Secret |
 | `ALIEXPRESS_TRACKING_ID` | nein | Affiliate-Tracking-ID. Alle drei AliExpress-Werte nötig, sonst Demo-Modus. |
 | `ANTHROPIC_API_KEY` | nein | Claude für das Matching. Leer → heuristisches Matching. |
-| `ANTHROPIC_MODEL` | nein | Modell für das Matching, Standard `claude-opus-5`. Günstiger: `claude-sonnet-5`. |
+| `ANTHROPIC_MODEL` | nein | Modell für Matching, Hashtag-Auswahl und Übersetzung. Standard `claude-haiku-4-5` (am günstigsten); bei schwacher Match-Qualität `claude-sonnet-5`. |
 | `META_ACCESS_TOKEN` | nein | Meta Ad Library API, langlebiger Token (60 Tage). Leer → Demo-Modus. |
 | `META_APP_ID`, `META_APP_SECRET` | nein | Nur für die Warnung, bevor der Meta-Token abläuft |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
@@ -81,7 +81,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 
 1. **Google Trends + Google Shopping:** Account bei SerpApi anlegen, `SERPAPI_API_KEY` setzen. Genutzt werden `engine=google_trends` (steigende verwandte Suchanfragen und 12-Monats-Zeitreihe je Keyword) und `engine=google_shopping` (Median der Endkundenpreise).
 2. **AliExpress:** Auf der AliExpress Open Platform eine App mit Zugriff auf die **Affiliate API** anlegen (Methode `aliexpress.affiliate.product.query`), dann `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` und `ALIEXPRESS_TRACKING_ID` setzen.
-3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Wer ein Modell ohne Effort-Unterstützung nutzt (z. B. Haiku 4.5), setzt in der Config `matching.effort` auf `null`.
+3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Der Parameter `effort` wird bei Modellen, die ihn nicht kennen (z. B. dem Standard Haiku 4.5), automatisch weggelassen.
 4. **Meta Ad Library (kostenlos, aber mit Rate-Limit):**
    1. Auf [facebook.com/ID](https://www.facebook.com/ID) die Identität bestätigen (Pflicht für den Zugriff auf die Ad Library API).
    2. Auf [developers.facebook.com](https://developers.facebook.com) eine App anlegen.
@@ -121,13 +121,34 @@ Weil viele offizielle APIs nicht zu bekommen sind, bindet der Radar zwei Quellen
 **Kosten**
 - Jeder Actor-Lauf hat eine **harte Kostengrenze** (`maxTotalChargeUsd`, Config `scraping.*.maxChargeUsd`). Es gibt **keine automatischen Wiederholungen**, weil jeder Versuch kostet.
 - Beide Actors rechnen **pro Ergebnis** ab, ohne Monatsmiete: TikTok ca. 1,50 $ je 1.000 Hashtags, 1688 ab 2 $ je 1.000 Angebote. Der 1688-Actor braucht Residential-Proxys, deren Datenverbrauch zusätzlich vom Guthaben abgeht.
-- **Gratis-Plan von Apify:** 5 $ Guthaben pro Monat. Ein wöchentlicher Lauf kostet grob 0,30 $ (TikTok, 2 Länder) plus bis zu 0,80 $ (1688, 50 Suchen × 8 Angebote), also etwa 1–5 $ im Monat. Das passt voraussichtlich ins Gratis-Guthaben; die Proxy-Kosten sind der unsichere Teil. Wird es knapp: `resultsPerKeyword` oder `demand.maxKeywordsPerCountry` senken. Nächster Plan: Starter für 19 $/Monat.
+- **Gratis-Plan von Apify:** 5 $ Guthaben pro Monat. Ein wöchentlicher Lauf kostet grob 0,30 $ (TikTok, 2 Länder) plus ca. 0,24 $ (1688, 24 Suchen × 5 Angebote), also etwa 2–3 $ im Monat. Die Obergrenzen je Lauf sind so gesetzt, dass selbst der ungünstigste Fall (1,12 $ je Lauf) unter 5 $ im Monat bleibt. Im Gratis-Plan kann ohnehin nichts nachberechnet werden; ist das Guthaben leer, schlagen die Läufe fehl. Nächster Plan: Starter für 19 $/Monat.
 - Der `--live`-Schutz gilt auch hier: `npm run collect` zeigt vor dem Start die geschätzten Kosten.
 
 **Risiken, die ihr bewusst tragt**
 - Die **Nutzungsbedingungen** von TikTok und 1688 untersagen automatisiertes Auslesen. Das Risiko ist vor allem vertraglich (Sperre, Abmahnung). Genutzt werden nur öffentliche Seiten ohne Login.
 - **Datenschutz:** Die TikTok-Daten enthalten Creator-Namen. Diese werden **vor dem Speichern entfernt**; gespeichert werden nur Hashtag, Rang, Reichweite und Kurve.
 - **Stabilität:** Actor-Ausgaben können sich ohne Vorwarnung ändern. Die Adapter lesen tolerant und melden „Ausgabeformat hat sich geändert“ als Fehler im Lauf. Die Adapter wurden **nicht gegen echte Actor-Ausgaben getestet**, weil kein Token vorhanden war. Beim ersten Live-Lauf also die Fehlerliste prüfen.
+
+## Kosten (Sparvariante, Standard)
+
+Die Config ist auf die günstigste Variante eingestellt, die rund 500 Kandidaten pro Woche erreichen kann (wöchentlicher Lauf):
+
+| Dienst | Plan | Monatlich |
+|---|---|---|
+| SerpApi (Google Trends + Shopping) | Starter, 1.000 Suchen | 25 $ |
+| Claude | `claude-haiku-4-5`, nach Verbrauch | ca. 3 $ |
+| Apify (TikTok Creative Center, 1688) | Gratis-Plan, 5 $ Guthaben | 0 $ |
+| Railway (Dashboard, Datenbank, Cron) | Hobby | ca. 5–10 $ |
+| AliExpress, Meta Ad Library, TikTok Ad Library | kostenlos | 0 $ |
+| **Summe** | | **ca. 33–38 $** |
+
+So wird das Budget eingehalten:
+- **Config-Prüfung:** `budget` in `radar.config.ts` legt die Tarife fest. Vor jedem Lauf wird geprüft, dass ein Lauf im ungünstigsten Fall höchstens Monatsbudget ÷ Läufe pro Monat verbraucht (SerpApi 230 Suchen, Apify 1,15 $). Passt eine Änderung nicht dazu, bricht `collect` mit Erklärung ab.
+- **Hartes SerpApi-Budget zur Laufzeit:** Ist es erschöpft, arbeitet der Lauf mit dem weiter, was er hat, statt mehr Suchen zu verbrauchen.
+- **Priorisierung:** Echte Shopping-Preise (5 je Land) und 1688-Suchen (12 je Land) bekommen nur die Keywords mit dem höchsten Trend-Score. Die übrigen nutzen die Preisschätzung, im Dashboard als „Schätzung“ markiert.
+- **AliExpress ist kostenlos:** Deshalb 12 Treffer pro Keyword statt 8, das bringt mehr Kandidaten ohne API-Kosten.
+
+Hochskalieren: `budget.serpApiMonthlySearches` auf den nächsten SerpApi-Plan setzen (Developer, 5.000 Suchen, 75 $) und `demand.maxKeywordsPerCountry` / `referencePrice.maxLookupsPerCountry` erhöhen; die Prüfung sagt, ob es passt. Railway: Für den Web-Service „Serverless“ (App Sleeping) aktivieren, dann läuft das Dashboard nur, wenn jemand es aufruft.
 
 ## Zentrale Config: `src/config/radar.config.ts`
 

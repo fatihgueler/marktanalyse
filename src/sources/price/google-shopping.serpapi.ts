@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { radarConfig, type Country } from "@/config/radar.config";
 import { median, round } from "@/lib/stats";
+import type { SearchBudget } from "../budget";
 import { Throttle, fetchJson } from "../http";
 import type { PriceRecord, PriceSource } from "../types";
 
@@ -16,12 +17,18 @@ const shoppingSchema = z.object({
 export class GoogleShoppingSerpApiSource implements PriceSource {
   readonly id = "google-shopping";
   readonly label = "Google Shopping";
+  readonly maxLookupsPerCountry = radarConfig.referencePrice.maxLookupsPerCountry;
   readonly mode = "live" as const;
   private readonly throttle = new Throttle();
 
-  constructor(private readonly apiKey: string) {}
+  constructor(
+    private readonly apiKey: string,
+    private readonly budget: SearchBudget,
+  ) {}
 
   async referencePrice(keyword: string, country: Country): Promise<PriceRecord | null> {
+    // Budget erschöpft → kein echter Preis, der Kategorie-Faktor greift (wie bei zu wenigen Treffern)
+    if (!this.budget.tryTake()) return null;
     const profile = radarConfig.countries[country];
     const search = new URLSearchParams({
       engine: "google_shopping",

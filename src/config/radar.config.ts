@@ -107,15 +107,19 @@ export const radarConfig = {
     } satisfies Record<Country, string[]>,
     /** Kostenkontrolle SerpApi: je Seed 1 Request, je Keyword 1 Request */
     maxSeedsPerCountry: 8,
-    maxKeywordsPerCountry: 25,
+    /** 45 × 4 Länder = 180 Trendkurven je Lauf – passt mit Entdeckung und Preisabfragen ins SerpApi-Budget */
+    maxKeywordsPerCountry: 45,
     /** Zeitraum der Zeitreihe (SerpApi `date`) */
     seriesTimeframe: "today 12-m",
     discoveryTimeframe: "today 3-m",
   },
 
   supply: {
-    /** Anzahl AliExpress-Treffer je Keyword/Land */
-    resultsPerKeyword: 8,
+    /**
+     * Treffer je Keyword/Land und Angebotsquelle. AliExpress ist kostenlos – mehr Treffer bringen mehr
+     * Kandidaten, ohne zusätzliche API-Kosten (nur etwas mehr Claude-Tokens im Matching).
+     */
+    resultsPerKeyword: 12,
     /** Nur Keywords mit Trend-Score ≥ diesem Wert werden auf der Angebotsseite gesucht */
     minTrendScoreForSupply: 0.2,
   },
@@ -127,9 +131,11 @@ export const radarConfig = {
     maxOutputTokens: 4000,
     /**
      * Denktiefe für Claude (`output_config.effort`). Reine Klassifikation → "low".
-     * Auf null setzen, falls ANTHROPIC_MODEL ein Modell ohne Effort-Unterstützung ist (z. B. Haiku 4.5).
+     * Wird bei Modellen ohne Effort-Unterstützung automatisch weggelassen (siehe modelsWithoutEffort).
      */
     effort: "low" as "low" | "medium" | "high" | null,
+    /** Modell-Präfixe, die `effort` mit einem Fehler ablehnen (u. a. das Standardmodell Haiku 4.5) */
+    modelsWithoutEffort: ["claude-haiku-4-5", "claude-sonnet-4-5"],
     /**
      * Heuristik: Zubehör-/Ersatzteil-Erkennung → Relevanz halbiert, wenn der Begriff nicht im Keyword steht.
      * `anywhere`: eindeutig, zählt überall im Titel. `leading`: zählt nur in der vorderen Titelhälfte
@@ -315,6 +321,11 @@ export const radarConfig = {
     minSampleSize: 3,
     /** Treffer pro Shopping-Anfrage, die in den Median eingehen */
     maxResults: 20,
+    /**
+     * Kostenbremse: Echte Shopping-Preise nur für die N Keywords mit dem höchsten Trend-Score je Land;
+     * alle anderen nutzen den Kategorie-Faktor (im Dashboard als Schätzung markiert).
+     */
+    maxLookupsPerCountry: 5,
   },
 
   // ANNAHME: Startparameter; nach einigen Wochen Historie an echten Drop-Erfolgen kalibrieren.
@@ -395,8 +406,8 @@ export const radarConfig = {
       /** Zeitfenster der Popularitätskurve – 120 Tage ergeben ~17 Wochenwerte */
       days: "120",
       hashtagsPerCountry: 100,
-      /** harte Kostengrenze je Lauf in USD (Apify-Parameter maxTotalChargeUsd) */
-      maxChargeUsd: 0.5,
+      /** harte Kostengrenze je Lauf in USD (Apify-Parameter maxTotalChargeUsd); 100 Hashtags ≈ 0,15 $ */
+      maxChargeUsd: 0.2,
       /** ANNAHME: Preis laut Actor-Seite, nur für die Kostenschätzung vor Live-Läufen */
       usdPerThousandResults: 1.5,
       /** Allgemeine Hashtags ohne Produktbezug – werden vor der Klassifizierung verworfen */
@@ -408,8 +419,11 @@ export const radarConfig = {
       /** Abrechnung pro Ergebnis, keine Monatsmiete – passt ins Gratis-Guthaben von Apify */
       actorId: "memo23~1688-wholesale-scraper",
       /** Angebote, die je Keyword geladen und übernommen werden (bestimmt die Kosten) */
-      resultsPerKeyword: 8,
-      maxChargeUsd: 0.5,
+      resultsPerKeyword: 5,
+      /** Kostenbremse: 1688-Suchen nur für die N Keywords mit dem höchsten Trend-Score je Land */
+      maxSearchesPerCountry: 12,
+      /** harte Kostengrenze je Suche in USD; 5 Angebote ≈ 0,01 $ */
+      maxChargeUsd: 0.03,
       /** ANNAHME: Preis laut Actor-Seite („ab 2 $ / 1.000 Angebote“), nur für die Kostenschätzung; Proxy-Kosten kommen ggf. hinzu */
       usdPerThousandResults: 2,
     },
@@ -447,6 +461,20 @@ export const radarConfig = {
       "buero-schreibwaren": 0.3,
       sonstiges: 0.5,
     } satisfies Record<CategoryId, number>,
+  },
+
+  /**
+   * Kostenrahmen – „so günstig wie möglich“. Die Config-Prüfung stellt sicher, dass ein Lauf im
+   * ungünstigsten Fall nicht mehr verbraucht als Monatsbudget ÷ Läufe pro Monat; zur Laufzeit
+   * begrenzt ein hartes Suchbudget die SerpApi-Aufrufe zusätzlich.
+   */
+  budget: {
+    /** wöchentlicher Lauf */
+    runsPerMonth: 4.33,
+    /** SerpApi-Plan „Starter“ (25 $/Monat). Gratis-Plan: 250 – dann Keywords/Lookups deutlich senken. */
+    serpApiMonthlySearches: 1000,
+    /** Apify-Gratis-Plan: 5 $ Guthaben pro Monat */
+    apifyMonthlyUsd: 5,
   },
 
   calibration: {

@@ -11,6 +11,7 @@ const MOCK_SAMPLE_SIZE = 12;
 export class GoogleShoppingMockSource implements PriceSource {
   readonly id = "google-shopping";
   readonly label = "Google Shopping";
+  readonly maxLookupsPerCountry = radarConfig.referencePrice.maxLookupsPerCountry;
   readonly mode = "mock" as const;
 
   async referencePrice(keyword: string, country: Country): Promise<PriceRecord | null> {

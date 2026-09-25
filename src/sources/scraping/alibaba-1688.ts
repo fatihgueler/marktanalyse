@@ -84,6 +84,7 @@ export function normalize1688Item(item: Item, keyword: string, country: Country,
 export class Alibaba1688ApifySource implements SupplySource {
   readonly id = "alibaba-1688";
   readonly label = "1688";
+  readonly maxSearchesPerCountry = radarConfig.scraping.alibaba1688.maxSearchesPerCountry;
   readonly mode = "live" as const;
   private readonly throttle = new Throttle();
 

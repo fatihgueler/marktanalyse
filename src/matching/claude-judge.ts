@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { effortOption } from "./claude-options";
 import { CATEGORY_IDS, radarConfig, type RadarConfig } from "@/config/radar.config";
 import { clamp } from "@/lib/stats";
 import type { JudgeInput, Judgment, MatchJudge } from "./types";
@@ -66,7 +67,7 @@ export class ClaudeJudge implements MatchJudge {
       ],
       output_config: {
         format: zodOutputFormat(judgmentSchema),
-        ...(this.config.matching.effort ? { effort: this.config.matching.effort } : {}),
+        ...effortOption(this.model, this.config),
       },
     });
 

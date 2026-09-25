@@ -6,7 +6,9 @@
  * Phase 2b: TikTok Creative Center (`TrendSource`) und 1688 (`SupplySource`) laufen über den
  * Scraping-Dienst Apify (APIFY_TOKEN) – bewusste Entscheidung des Auftraggebers, siehe PLAN-PHASE2.md §9.
  */
+import { perRunBudget } from "@/config/config-check";
 import type { CollectEnv } from "@/lib/env";
+import { SearchBudget } from "./budget";
 import { AdLibraryMockSource } from "./ads/ad-library.mock";
 import { MetaAdLibrarySource } from "./ads/meta-ad-library";
 import { TikTokAdsSource } from "./ads/tiktok-ads";
@@ -28,6 +30,8 @@ import type { AdSignalSource, PriceSource, SourceMode, SupplySource, TrendSource
 const MOCK_TIKTOK_FACTOR = 0.6;
 
 export interface SourceSet {
+  /** gemeinsames SerpApi-Budget (Trends + Shopping); null im Mock-Modus */
+  serpApiBudget: SearchBudget | null;
   trend: TrendSource[];
   supply: SupplySource[];
   price: PriceSource;
@@ -35,9 +39,10 @@ export interface SourceSet {
 }
 
 export function createSources(env: CollectEnv, now: Date = new Date()): SourceSet {
+  const serpApiBudget = env.SERPAPI_API_KEY ? new SearchBudget("SerpApi", perRunBudget().serpApiSearches) : null;
   const hashtagClassifier = createHashtagClassifier(env);
   const trend: TrendSource[] = [
-    env.SERPAPI_API_KEY ? new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY) : new GoogleTrendsMockSource(now),
+    env.SERPAPI_API_KEY && serpApiBudget ? new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY, serpApiBudget) : new GoogleTrendsMockSource(now),
     env.APIFY_TOKEN ? new TikTokHashtagsApifySource(env.APIFY_TOKEN, hashtagClassifier) : new TikTokHashtagsMockSource(hashtagClassifier, now),
   ];
 
@@ -49,9 +54,8 @@ export function createSources(env: CollectEnv, now: Date = new Date()): SourceSe
       : new Alibaba1688MockSource(),
   ];
 
-  const price: PriceSource = env.SERPAPI_API_KEY
-    ? new GoogleShoppingSerpApiSource(env.SERPAPI_API_KEY)
-    : new GoogleShoppingMockSource();
+  const price: PriceSource =
+    env.SERPAPI_API_KEY && serpApiBudget ? new GoogleShoppingSerpApiSource(env.SERPAPI_API_KEY, serpApiBudget) : new GoogleShoppingMockSource();
 
   const ads: AdSignalSource[] = [
     env.META_ACCESS_TOKEN
@@ -62,7 +66,7 @@ export function createSources(env: CollectEnv, now: Date = new Date()): SourceSe
       : new AdLibraryMockSource("tiktok-ads", "TikTok Ad Library", MOCK_TIKTOK_FACTOR, now),
   ];
 
-  return { trend, supply, price, ads };
+  return { serpApiBudget, trend, supply, price, ads };
 }
 
 /** Übersicht „Quelle → Modus“, wird pro Lauf gespeichert und im Dashboard angezeigt. */

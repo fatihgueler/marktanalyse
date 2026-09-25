@@ -7,7 +7,7 @@
  * Railway Cron: `npm run collect -- --live`.
  */
 import { config as loadDotenv } from "dotenv";
-import { configVersion, validateConfig } from "@/config/config-check";
+import { configVersion, perRunBudget, validateConfig, worstCaseSerpApiSearches } from "@/config/config-check";
 import { COUNTRIES, radarConfig, type Country } from "@/config/radar.config";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { mapWithConcurrency } from "@/lib/concurrency";
@@ -53,14 +53,15 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 // ── Kostenschutz ─────────────────────────────────────────────────────────
 
 function estimateLiveRequests(modes: Record<string, string>): string[] {
-  const { maxSeedsPerCountry, maxKeywordsPerCountry } = radarConfig.demand;
+  const { maxKeywordsPerCountry } = radarConfig.demand;
   const countries = COUNTRIES.length;
   const lines: string[] = [];
-  if (modes["google-trends"] === "live") {
-    lines.push(`SerpApi Google Trends: bis zu ${countries * (maxSeedsPerCountry + maxKeywordsPerCountry)} Suchen`);
-  }
-  if (modes["google-shopping"] === "live") {
-    lines.push(`SerpApi Google Shopping: bis zu ${countries * maxKeywordsPerCountry} Suchen`);
+  if (modes["google-trends"] === "live" || modes["google-shopping"] === "live") {
+    const budget = perRunBudget();
+    lines.push(
+      `SerpApi (Trends + Shopping): bis zu ${Math.min(worstCaseSerpApiSearches(), budget.serpApiSearches)} Suchen – hartes Budget ${budget.serpApiSearches} je Lauf ` +
+        `(${radarConfig.budget.serpApiMonthlySearches} Suchen/Monat ÷ ${radarConfig.budget.runsPerMonth} Läufe)`,
+    );
   }
   if (modes.aliexpress === "live") {
     lines.push(`AliExpress Affiliate API: bis zu ${countries * maxKeywordsPerCountry} Anfragen`);
@@ -81,12 +82,12 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
     lines.push(`Apify TikTok Creative Center (Scraping): ${runs} Läufe, je höchstens ${usd.toFixed(2)} $ (hart begrenzt auf ${scraping.tiktokHashtags.maxChargeUsd} $)`);
   }
   if (modes["alibaba-1688"] === "live") {
-    const searches = radarConfig.wholesale.countries.length * maxKeywordsPerCountry;
+    const searches = radarConfig.wholesale.countries.length * Math.min(maxKeywordsPerCountry, scraping.alibaba1688.maxSearchesPerCountry);
     const usd = (searches * scraping.alibaba1688.resultsPerKeyword * scraping.alibaba1688.usdPerThousandResults) / 1000;
     lines.push(`Apify 1688 (Scraping): bis zu ${searches} Suchen, höchstens ca. ${usd.toFixed(2)} $ + ggf. Proxy-Kosten (je Suche hart begrenzt auf ${scraping.alibaba1688.maxChargeUsd} $)`);
   }
   if (modes.claude === "live") {
-    lines.push(`Claude (${process.env.ANTHROPIC_MODEL ?? "Standardmodell"}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
+    lines.push(`Claude (${readCollectEnv().ANTHROPIC_MODEL}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
   }
   return lines;
 }
@@ -262,9 +263,10 @@ async function fetchAdSignals(ctx: RunContext, keyword: string, country: Country
 }
 
 /** Angebote aller Quellen für ein Keyword holen; Fehler einer Quelle stoppen die anderen nicht. */
-async function searchAllSupply(ctx: RunContext, keyword: string, country: Country) {
+async function searchAllSupply(ctx: RunContext, keyword: string, country: Country, allowed: Allowance) {
   const results: { supply: SupplySource; offers: SupplyRecord[] }[] = [];
   for (const supply of ctx.sources.supply) {
+    if (!allowed.supply.has(supply.id)) continue;
     try {
       const offers = await supply.search(keyword, country, radarConfig.supply.resultsPerKeyword);
       if (offers.length > 0) results.push({ supply, offers });
@@ -279,12 +281,15 @@ async function searchAllSupply(ctx: RunContext, keyword: string, country: Countr
  * Ein Keyword komplett verarbeiten: Angebote aller Quellen, dann Referenzpreis und Werbedaten
  * EINMAL je Keyword (nicht je Angebotsquelle – spart Kosten), dann Matching und Scoring je Quelle.
  */
-async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Country): Promise<void> {
+async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Country, allowed: Allowance): Promise<void> {
   const keyword = demand.record.keyword;
-  const bySource = await searchAllSupply(ctx, keyword, country);
+  const bySource = await searchAllSupply(ctx, keyword, country, allowed);
   if (bySource.length === 0) return;
 
-  const [reference, adRecords] = await Promise.all([fetchReferencePrice(ctx, keyword, country), fetchAdSignals(ctx, keyword, country)]);
+  const [reference, adRecords] = await Promise.all([
+    allowed.price ? fetchReferencePrice(ctx, keyword, country) : Promise.resolve(null),
+    fetchAdSignals(ctx, keyword, country),
+  ]);
   const ads = combineAdSignals(adRecords);
   for (const { offers } of bySource) {
     ctx.stats.offers += offers.length;
@@ -401,17 +406,55 @@ async function processOffers(
   }
 }
 
+/** Welche kostenpflichtigen Abfragen ein Keyword bekommt – vorab festgelegt, damit die Reihenfolge stimmt. */
+interface Allowance {
+  supply: Set<string>;
+  price: boolean;
+}
+
+/**
+ * Verteilt die Kontingente der Kostenbremsen (Shopping-Preise, 1688-Suchen je Land) an die Keywords
+ * mit dem höchsten Trend-Score. Erfolgt synchron vor der parallelen Verarbeitung, damit ein schwächeres
+ * Keyword einem stärkeren nie den Platz wegnimmt.
+ */
+function assignAllowances(ctx: RunContext, sorted: ScoredDemand[]): Allowance[] {
+  const supplyUsed = new Map<string, number>();
+  let priceUsed = 0;
+  const priceLimit = ctx.sources.price.maxLookupsPerCountry ?? Infinity;
+  return sorted.map(() => {
+    const supply = new Set<string>();
+    for (const source of ctx.sources.supply) {
+      const used = supplyUsed.get(source.id) ?? 0;
+      if (used < (source.maxSearchesPerCountry ?? Infinity)) {
+        supply.add(source.id);
+        supplyUsed.set(source.id, used + 1);
+      }
+    }
+    const price = priceUsed < priceLimit;
+    if (price) priceUsed++;
+    return { supply, price };
+  });
+}
+
 async function collectCountry(ctx: RunContext, country: Country): Promise<void> {
-  // Liefern mehrere Trendquellen dasselbe Keyword, wird es nur einmal weiterverarbeitet (erste Quelle gewinnt).
-  const processed = new Set<string>();
-  for (const trendSource of ctx.sources.trend) {
-    const demand = await collectDemand(ctx, trendSource, country);
-    // Vorfilter spart Angebots-, Preis- und Claude-Aufrufe für Keywords ohne Dynamik.
-    const qualified = demand.filter((d) => d.trend.score >= radarConfig.supply.minTrendScoreForSupply && !processed.has(d.record.keyword));
-    qualified.forEach((d) => processed.add(d.record.keyword));
-    ctx.stats.qualified += qualified.length;
-    await mapWithConcurrency(qualified, radarConfig.collect.concurrency, (d) => processKeyword(ctx, d, country));
+  // Erst alle Trendquellen einsammeln, dann gemeinsam priorisieren.
+  const all: ScoredDemand[] = [];
+  for (const trendSource of ctx.sources.trend) all.push(...(await collectDemand(ctx, trendSource, country)));
+
+  // Liefern mehrere Trendquellen dasselbe Keyword, zählt das mit dem höheren Trend-Score.
+  const best = new Map<string, ScoredDemand>();
+  for (const d of all) {
+    const current = best.get(d.record.keyword);
+    if (!current || d.trend.score > current.trend.score) best.set(d.record.keyword, d);
   }
+  // Vorfilter spart Angebots-, Preis- und Claude-Aufrufe für Keywords ohne Dynamik.
+  const qualified = [...best.values()]
+    .filter((d) => d.trend.score >= radarConfig.supply.minTrendScoreForSupply)
+    .sort((a, b) => b.trend.score - a.trend.score);
+  ctx.stats.qualified += qualified.length;
+
+  const allowances = assignAllowances(ctx, qualified);
+  await mapWithConcurrency(qualified, radarConfig.collect.concurrency, (d, i) => processKeyword(ctx, d, country, allowances[i]!));
 }
 
 // ── Hauptablauf ──────────────────────────────────────────────────────────
@@ -498,6 +541,7 @@ async function main(): Promise<number> {
   });
 
   const { keywords, qualified, offers, candidates } = ctx.stats;
+  if (sources.serpApiBudget) console.log(`  SerpApi-Budget: ${sources.serpApiBudget.consumed} von ${sources.serpApiBudget.limit} Suchen verbraucht`);
   console.log(`\nLauf ${run.id}: ${status}`);
   console.log(`  ${keywords} Keywords, ${qualified} mit Trend-Dynamik, ${offers} Angebote, ${candidates} Kandidaten`);
   if (ctx.errors.length > 0) {

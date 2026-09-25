@@ -26,9 +26,47 @@ export function validateConfig(config: RadarConfig = radarConfig): void {
   if (config.trend.recentWeeks + config.trend.previousWeeks >= config.trend.minSeriesWeeks) {
     throw new Error("Config: trend.minSeriesWeeks muss größer als recentWeeks + previousWeeks sein.");
   }
+  const budget = perRunBudget(config);
+  const serp = worstCaseSerpApiSearches(config);
+  if (serp > budget.serpApiSearches) {
+    throw new Error(
+      `Config: Ein Lauf kann bis zu ${serp} SerpApi-Suchen verbrauchen, das Budget erlaubt ${budget.serpApiSearches} ` +
+        "(budget.serpApiMonthlySearches ÷ runsPerMonth). demand.maxKeywordsPerCountry oder referencePrice.maxLookupsPerCountry senken.",
+    );
+  }
+  const apify = worstCaseApifyUsd(config);
+  if (apify > budget.apifyUsd + 1e-9) {
+    throw new Error(
+      `Config: Ein Lauf kann bis zu ${apify.toFixed(2)} $ bei Apify kosten, das Budget erlaubt ${budget.apifyUsd.toFixed(2)} $. ` +
+        "scraping.*.maxChargeUsd oder scraping.alibaba1688.maxSearchesPerCountry senken.",
+    );
+  }
   for (const [currency, rate] of Object.entries(config.fx)) {
     if (!(rate > 0)) throw new Error(`Config: Wechselkurs ${currency} muss > 0 sein.`);
   }
+}
+
+/** Höchstzahl SerpApi-Suchen, die ein Lauf laut Config verbrauchen kann (Entdeckung + Kurven + Preise). */
+export function worstCaseSerpApiSearches(config: RadarConfig = radarConfig): number {
+  const countries = Object.keys(config.countries) as (keyof RadarConfig["countries"])[];
+  const seeds = countries.reduce((sum, c) => sum + Math.min(config.demand.seeds[c].length, config.demand.maxSeedsPerCountry), 0);
+  return seeds + countries.length * (config.demand.maxKeywordsPerCountry + config.referencePrice.maxLookupsPerCountry);
+}
+
+/** Höchstbetrag Apify je Lauf laut Config (alle Kostengrenzen ausgeschöpft). */
+export function worstCaseApifyUsd(config: RadarConfig = radarConfig): number {
+  const { tiktokHashtags, alibaba1688 } = config.scraping;
+  return (
+    tiktokHashtags.countries.length * tiktokHashtags.maxChargeUsd +
+    config.wholesale.countries.length * alibaba1688.maxSearchesPerCountry * alibaba1688.maxChargeUsd
+  );
+}
+
+export function perRunBudget(config: RadarConfig = radarConfig) {
+  return {
+    serpApiSearches: Math.floor(config.budget.serpApiMonthlySearches / config.budget.runsPerMonth),
+    apifyUsd: config.budget.apifyMonthlyUsd / config.budget.runsPerMonth,
+  };
 }
 
 /** Kurzer, stabiler Hash der Config – wird pro Lauf gespeichert. */

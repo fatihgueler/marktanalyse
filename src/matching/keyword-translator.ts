@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { radarConfig } from "@/config/radar.config";
+import { effortOption } from "./claude-options";
 
 const translationSchema = z.object({ keyword_zh: z.string() });
 
@@ -31,7 +31,7 @@ export class ClaudeKeywordTranslator {
       messages: [{ role: "user", content: keyword }],
       output_config: {
         format: zodOutputFormat(translationSchema),
-        ...(radarConfig.matching.effort ? { effort: radarConfig.matching.effort } : {}),
+        ...effortOption(this.model),
       },
     });
     const translated = response.parsed_output?.keyword_zh.trim();
