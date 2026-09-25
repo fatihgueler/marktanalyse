@@ -1,0 +1,184 @@
+// nexana Trend-Radar – Datenmodell
+// Jeder Lauf von `npm run collect` ist ein Snapshot (Run). Rohdaten der Quellen
+// werden pro Lauf gespeichert, damit jeder Score nachvollziehbar bleibt.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL // mind. eine Quelle fehlgeschlagen, Rest gespeichert
+  FAILED
+}
+
+enum Country {
+  DE
+  AT
+  CH
+  GB
+}
+
+/// Ein Durchlauf von `npm run collect`.
+model Run {
+  id            String    @id @default(cuid())
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        RunStatus @default(RUNNING)
+  /// { "google-trends": "mock" | "live", ... }
+  sourceModes   Json
+  /// Hash der Config-Werte, mit denen gescort wurde
+  configVersion String
+  /// gesammelte Adapter-Fehler [{ source, message, context }]
+  errors        Json?
+
+  demandSignals   DemandSignal[]
+  supplyOffers    SupplyOffer[]
+  referencePrices ReferencePrice[]
+  candidates      CandidateSnapshot[]
+
+  @@index([startedAt])
+}
+
+/// Normalisiertes Nachfrage-Signal: ein Keyword in einem Land, Wochen-Zeitreihe.
+model DemandSignal {
+  id        String   @id @default(cuid())
+  runId     String
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source    String
+  country   Country
+  keyword   String
+  seedTerm  String?
+  /// [{ weekStart: "YYYY-MM-DD", value: 0..100 }], älteste zuerst
+  series    Json
+  fetchedAt DateTime
+  raw       Json
+
+  candidates CandidateSnapshot[]
+
+  @@unique([runId, source, country, keyword])
+  @@index([keyword, country])
+}
+
+/// Stabile Identität eines Produkts über Läufe hinweg.
+model SupplyProduct {
+  id          String   @id @default(cuid())
+  source      String
+  externalId  String
+  title       String
+  url         String
+  imageUrl    String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @updatedAt
+
+  offers     SupplyOffer[]
+  candidates CandidateSnapshot[]
+  judgments  MatchJudgment[]
+
+  @@unique([source, externalId])
+}
+
+/// Angebotsdaten eines Produkts in einem Lauf.
+model SupplyOffer {
+  id           String        @id @default(cuid())
+  runId        String
+  run          Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  productId    String
+  product      SupplyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  keyword      String
+  shipTo       Country
+  price        Decimal       @db.Decimal(10, 2)
+  currency     String
+  /// null → Versand-Annahme aus der Config
+  shippingCost Decimal?      @db.Decimal(10, 2)
+  orders30d    Int?
+  /// 0..100 (AliExpress evaluate_rate)
+  rating       Float?
+  /// Trefferzahl der Suche = Anbieter-Proxy
+  resultCount  Int?
+  fetchedAt    DateTime
+  raw          Json
+
+  candidates CandidateSnapshot[]
+
+  @@unique([runId, productId, keyword, shipTo])
+  @@index([keyword])
+}
+
+/// Westlicher Referenz-Verkaufspreis (brutto) je Keyword und Land.
+model ReferencePrice {
+  id          String   @id @default(cuid())
+  runId       String
+  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  source      String
+  country     Country
+  keyword     String
+  medianPrice Decimal  @db.Decimal(10, 2)
+  currency    String
+  sampleSize  Int
+  fetchedAt   DateTime
+  raw         Json
+
+  @@unique([runId, source, country, keyword])
+}
+
+/// Cache der Match-Bewertung (Claude oder Heuristik).
+model MatchJudgment {
+  id        String        @id @default(cuid())
+  keyword   String
+  productId String
+  product   SupplyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// "claude:<modell>" | "heuristic"
+  judge     String
+  relevance Float
+  category  String
+  reason    String
+  createdAt DateTime      @default(now())
+
+  @@unique([keyword, productId, judge])
+}
+
+/// Ergebnis eines Laufs: ein Drop-Kandidat mit allen Teil-Scores.
+model CandidateSnapshot {
+  id             String        @id @default(cuid())
+  runId          String
+  run            Run           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  productId      String
+  product        SupplyProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  demandSignalId String
+  demandSignal   DemandSignal  @relation(fields: [demandSignalId], references: [id], onDelete: Cascade)
+  supplyOfferId  String
+  supplyOffer    SupplyOffer   @relation(fields: [supplyOfferId], references: [id], onDelete: Cascade)
+  country        Country
+  keyword        String
+  category       String
+  relevance      Float
+  matchReason    String
+  matchJudge     String
+
+  trendScore       Float
+  marginScore      Float
+  competitionScore Float
+  totalScore       Float
+
+  landedCost          Decimal @db.Decimal(10, 2)
+  referencePrice      Decimal @db.Decimal(10, 2)
+  referencePriceSource String
+  marginAbs           Decimal @db.Decimal(10, 2)
+  marginPct           Float
+  belowMinMargin      Boolean
+  currency            String
+
+  /// vollständiger Rechenweg aller Teil-Scores
+  breakdown Json
+
+  @@unique([runId, productId, country, keyword])
+  @@index([runId, totalScore])
+  @@index([productId, country])
+}

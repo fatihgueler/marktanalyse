@@ -1,0 +1,21 @@
+# Abhängigkeiten
+node_modules/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Prisma Client (wird bei install/build generiert)
+src/generated/
+
+# Secrets – niemals committen
+.env
+.env.*
+!.env.example
+
+# Logs / OS
+npm-debug.log*
+.DS_Store
+coverage/
