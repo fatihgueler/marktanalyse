@@ -21,7 +21,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <AppHeader />
+      <AppHeader active="rangliste" />
       <main id="inhalt" className="mx-auto max-w-[1400px] px-4 pb-16 pt-8 sm:px-6">
         {!run ? (
           <EmptyState
@@ -48,7 +48,8 @@ async function Dashboard({
 }) {
   const [rows, categoryCounts] = await Promise.all([getCandidates(runId, filters), getCategoryCounts(runId, filters.country)]);
   const aboveMin = rows.filter((r) => !r.belowMinMargin).length;
-  const errors = Array.isArray(run.errors) ? run.errors.length : 0;
+  // Warnungen (z. B. Token läuft bald ab) zählen nicht als Fehler
+  const errors = Array.isArray(run.errors) ? run.errors.filter((e) => (e as { level?: string } | null)?.level !== "warnung").length : 0;
 
   return (
     <>

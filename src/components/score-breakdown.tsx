@@ -51,8 +51,20 @@ export function ScoreBreakdown({ breakdown }: { breakdown: CandidateBreakdown })
       <>
         <Row label="Treffer auf AliExpress" value={competition.resultCount === null ? "unbekannt" : formatNumber(competition.resultCount)} hint="Anbieter-Proxy" />
         <Row label="Bestellungen / 30 Tage (Top-Treffer)" value={competition.orders30dSum === null ? "unbekannt" : formatNumber(competition.orders30dSum)} />
-        <Row label="Sättigung Anbieter" value={formatNumber(competition.resultsSaturation, 2)} />
-        <Row label="Sättigung Nachfrage" value={formatNumber(competition.ordersSaturation, 2)} />
+        <Row
+          label="Werbetreibende im Land"
+          value={competition.advertisers === null || competition.advertisers === undefined ? "keine Daten" : formatNumber(competition.advertisers)}
+          hint="Meta + TikTok, nur EU"
+        />
+        <Row label={`Sättigung Anbieter × ${formatNumber(competition.weights.results, 2)}`} value={formatNumber(competition.resultsSaturation, 2)} />
+        <Row label={`Sättigung Nachfrage × ${formatNumber(competition.weights.orders, 2)}`} value={formatNumber(competition.ordersSaturation, 2)} />
+        {competition.advertisersSaturation !== undefined ? (
+          <Row
+            label={`Werbedruck × ${formatNumber(competition.weights.advertisers ?? 0, 2)}`}
+            value={formatNumber(competition.advertisersSaturation, 2)}
+            hint={competition.advertisers === null ? "neutral gewertet" : undefined}
+          />
+        ) : null}
       </>
     ),
   };

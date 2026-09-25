@@ -7,6 +7,8 @@ Google Trends (DE/AT/CH/GB) ──► AliExpress ──► Google Shopping ─�
    steigende Keywords          Angebote       Referenzpreis       Relevanz+Kategorie   (reine Funktionen)   Snapshot je Lauf
 ```
 
+**Phase 2** ergänzt Werbedaten aus der **Meta Ad Library** und der **TikTok Ad Library** (wie viele Shops ein Produkt im Zielland schon bewerben) sowie ein **Drop-Feedback** mit Kalibrierungsseite, die zeigt, welche Signale eure echten Erfolge vorhergesagt haben.
+
 **Ohne einen einzigen API-Key vollständig lauffähig:** Fehlt ein Key, läuft die jeweilige Quelle automatisch mit realistischen Demo-Daten. Das Dashboard kennzeichnet Demo-Daten deutlich.
 
 ## Stack
@@ -66,6 +68,9 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `ALIEXPRESS_TRACKING_ID` | nein | Affiliate-Tracking-ID. Alle drei AliExpress-Werte nötig, sonst Demo-Modus. |
 | `ANTHROPIC_API_KEY` | nein | Claude für das Matching. Leer → heuristisches Matching. |
 | `ANTHROPIC_MODEL` | nein | Modell für das Matching, Standard `claude-opus-5`. Günstiger: `claude-sonnet-5`. |
+| `META_ACCESS_TOKEN` | nein | Meta Ad Library API, langlebiger Token (60 Tage). Leer → Demo-Modus. |
+| `META_APP_ID`, `META_APP_SECRET` | nein | Nur für die Warnung, bevor der Meta-Token abläuft |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
 
 Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
 
@@ -76,7 +81,14 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 1. **Google Trends + Google Shopping:** Account bei SerpApi anlegen, `SERPAPI_API_KEY` setzen. Genutzt werden `engine=google_trends` (steigende verwandte Suchanfragen und 12-Monats-Zeitreihe je Keyword) und `engine=google_shopping` (Median der Endkundenpreise).
 2. **AliExpress:** Auf der AliExpress Open Platform eine App mit Zugriff auf die **Affiliate API** anlegen (Methode `aliexpress.affiliate.product.query`), dann `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` und `ALIEXPRESS_TRACKING_ID` setzen.
 3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Wer ein Modell ohne Effort-Unterstützung nutzt (z. B. Haiku 4.5), setzt in der Config `matching.effort` auf `null`.
-4. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
+4. **Meta Ad Library (kostenlos, aber mit Rate-Limit):**
+   1. Auf [facebook.com/ID](https://www.facebook.com/ID) die Identität bestätigen (Pflicht für den Zugriff auf die Ad Library API).
+   2. Auf [developers.facebook.com](https://developers.facebook.com) eine App anlegen.
+   3. Im [Graph API Explorer](https://developers.facebook.com/tools/explorer/) einen User-Token für die App erzeugen und ihn in einen **langlebigen Token (60 Tage)** tauschen, etwa über den [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/) („Extend Access Token“).
+   4. `META_ACCESS_TOKEN` setzen. Optional `META_APP_ID` und `META_APP_SECRET`, dann warnt `collect` 10 Tage vor Ablauf. Einen abgelaufenen Token meldet der Lauf als Fehler bei „meta-ad-library“.
+5. **TikTok Ad Library:** Auf [developers.tiktok.com](https://developers.tiktok.com/products/commercial-content-api) die **Commercial Content API** beantragen. TikTok prüft jeden Antrag, und ob kommerzielle Antragsteller zugelassen werden, ist nicht garantiert. Nach der Zulassung `TIKTOK_CLIENT_KEY` und `TIKTOK_CLIENT_SECRET` setzen.
+6. **Abdeckung der Werbedaten:** Beide Bibliotheken zeigen nicht-politische Anzeigen nur für die **EU**. Werbedaten gibt es daher für **DE und AT**. Für CH und GB wird der Werbedruck neutral gewertet und im Dashboard als „–“ angezeigt.
+7. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
 
    ```
    Kostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):
@@ -86,7 +98,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
    ```
 
    Erst `npm run collect -- --live` ruft die APIs tatsächlich auf. Die Mengen steuern `demand.maxSeedsPerCountry` und `demand.maxKeywordsPerCountry` in der Config.
-5. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
+8. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
 
 Hinweis zur Live-Anbindung: Die Adapter für SerpApi und AliExpress sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet**. Beim ersten Live-Lauf lohnt ein Blick in die Fehlerliste des Laufs (Ausgabe von `collect` und `Run.errors`).
 
@@ -108,13 +120,16 @@ Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch
 
 - **Trend-Dynamik T (0–1):** vergleicht die letzten 4 Wochen mit den 4 Wochen davor. Das Wachstum geht sättigend ein (Verdopplung ≈ 0,5). Wenig Vorgeschichte im restlichen Jahr ergibt einen **Frühphasen-Bonus**, aber nur bei steigendem Interesse. Das absolute Niveau zählt bewusst wenig. Lückenhafte Reihen mit Nullwerten in den letzten Wochen gelten als Rauschen (T = 0). Jedes Keyword wird nur mit sich selbst verglichen, weil Google-Trends-Werte je Abfrage normiert sind.
 - **Marge M (0–1):** Landed Cost = Einkauf + Versand + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land. Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
-- **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus der Trefferzahl auf AliExpress (Anbieter-Proxy) und dem Bestellvolumen der Top-Treffer.
+- **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus drei Signalen: Trefferzahl auf AliExpress (Gewicht 0,25), Bestellvolumen der Top-Treffer (0,25) und **Werbedruck** = Zahl der Shops, die das Keyword im Zielland auf Meta/TikTok bewerben (0,50). Ohne Werbedaten (CH, GB) zählt der Werbedruck neutral.
+- **Marktdynamik der Werbung** (neue Anzeigen der letzten 4 Wochen gegenüber den 4 davor) wird **nur angezeigt, nicht gewichtet**. Ob steigende Werbung Nachfrage oder Konkurrenz anzeigt, zeigt erst die Kalibrierung.
 - **Gesamtscore:** `100 × Relevanz × (0,50·T + 0,35·M + 0,15·W)`. Kandidaten unter dem Mindest-Rohertrag werden gespeichert, aber markiert und ans Ende sortiert.
 
 ## Dashboard
 
 - `/`: Rangliste des letzten erfolgreichen Laufs mit Filtern für Land und Kategorie sowie wählbarer Sortierung. Die Filter stehen in der URL und lassen sich teilen. Der Score-Balken jeder Zeile ist in Trend, Marge und Wettbewerb zerlegt (Tooltip mit Punkten).
 - `/produkt/[id]`: Detailansicht mit einer Kurzfassung in Klartext, der Aufschlüsselung aller Teil-Scores samt Zwischenwerten, der 52-Wochen-Trendkurve (Vergleichsfenster markiert), der Kalkulation (Landed Cost und Marge), dem Score-Verlauf über alle Läufe und den Zeitstempeln der Rohdaten.
+- In der Detailansicht außerdem: Werbeaktivität (Werbetreibende, aktive Anzeigen, neue Anzeigen je Woche, Links zu Beispiel-Anzeigen) und das Formular **Drop-Ergebnis** (Datum, Stück, Retourenquote, Urteil Top/Okay/Flop).
+- `/kalibrierung`: vergleicht die Scores zum Zeitpunkt der Drop-Entscheidung zwischen Top- und Flop-Drops, je Signal mit Bewertung („trennt gut“ … „umgekehrt“) und Empfehlung. Ab 3 Top- und 3 Flop-Drops (Config `calibration.minPerGroup`). Es wird **nichts automatisch** geändert; Gewichte passt ihr bewusst in der Config an.
 - Einfacher Passwortschutz über `DASHBOARD_PASSWORD`, sonst keine Nutzerverwaltung.
 
 ## Deployment auf Railway
@@ -128,17 +143,20 @@ Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch
 ```
 src/
 ├── config/        radar.config.ts (alle Annahmen), Validierung + Config-Version
-├── sources/       Adapter-Interfaces, Registry, Google Trends, AliExpress, Google Shopping, Mock-Katalog
+├── sources/       Adapter-Interfaces, Registry, Google Trends, AliExpress, Google Shopping,
+│                  Werbebibliotheken (ads/: Meta, TikTok), Mock-Katalog
 ├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik
-├── scoring/       trend, margin, competition, score (+ Tests)
+├── scoring/       trend, margin, competition, ads, score, calibration (+ Tests)
 ├── jobs/          collect.ts
 ├── lib/           db, env, auth, Formatierung, Queries
 ├── components/    Dashboard-Komponenten (+ shadcn/ui unter ui/)
-└── app/           Seiten: / (Rangliste), /produkt/[id], /login
+└── app/           Seiten: / (Rangliste), /produkt/[id], /kalibrierung, /login
 prisma/            schema.prisma, Migrationen
 ```
 
-Eine neue Quelle (Phase 2) implementiert `TrendSource`, `SupplySource` oder `PriceSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen. Collect-Job und Dashboard bleiben unverändert.
+Eine neue Quelle implementiert `TrendSource`, `SupplySource`, `PriceSource` oder `AdSignalSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen.
+
+**Offen aus Phase 2:** 1688.com ist nicht angebunden. Offizielle API-Zugänge gibt es nur für Firmen mit chinesischer Gewerbeanmeldung oder über einen Einkaufsagenten mit 1688-Zugang; bezahlte Datendienste legen ihre Datenherkunft nicht offen. Sobald ein offizieller Zugang da ist, kommt 1688 als weitere `SupplySource` dazu (Details in `PLAN-PHASE2.md`). TikTok Creative Center hat keine offizielle API und wird nicht angebunden.
 
 ## Bekannte Punkte
 

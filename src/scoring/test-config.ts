@@ -39,5 +39,6 @@ export function makeTestConfig(): RadarConfig {
   };
   config.competition = { resultCountLogCap: 5, ordersLogCap: 5, advertisersLogCap: 2, weights: { results: 0.25, orders: 0.25, advertisers: 0.5 } };
   config.score = { weights: { trend: 0.5, margin: 0.35, competition: 0.15 }, relevanceExponent: 1 };
+  config.calibration = { minPerGroup: 3, strongDifference: 0.15, weakDifference: 0.05 };
   return config;
 }

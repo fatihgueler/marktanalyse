@@ -5,6 +5,8 @@ import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { sourceLabel } from "@/lib/labels";
 import type { CandidateRow } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import type { AdsBreakdown } from "@/scoring/ads";
+import { momentumLabel } from "./ad-activity";
 import { ScoreBar } from "./score-bar";
 import { Sparkline } from "./sparkline";
 
@@ -18,10 +20,30 @@ function growthLabel(growth: number): string {
 }
 
 
+/** Werbetreibende im Zielland + Marktdynamik; „–“, wenn das Land nicht abgedeckt ist (CH, GB). */
+function AdCell({ ads }: { ads: AdsBreakdown | undefined }) {
+  if (!ads?.covered) {
+    return (
+      <span className="font-mono text-xs text-subtle-foreground" title="Keine Werbedaten für dieses Land (nur EU)">
+        –
+      </span>
+    );
+  }
+  return (
+    <>
+      <div className="font-mono font-medium tabular">
+        {ads.capped ? "≥ " : ""}
+        {formatNumber(ads.advertisers ?? 0)}
+      </div>
+      <div className="font-mono text-[11px] text-muted-foreground tabular">neu: {momentumLabel(ads.momentum.growth, ads.momentum.recent)}</div>
+    </>
+  );
+}
+
 export function CandidateTable({ rows }: { rows: CandidateRow[] }) {
   return (
     <div className="overflow-x-auto rounded-xl border bg-card/70 backdrop-blur-sm">
-      <table className="w-full min-w-[980px] border-collapse text-sm">
+      <table className="w-full min-w-[1080px] border-collapse text-sm">
         <caption className="sr-only">Drop-Kandidaten, sortiert nach gewählter Sortierung</caption>
         <thead>
           <tr className="border-b text-left font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -31,6 +53,7 @@ export function CandidateTable({ rows }: { rows: CandidateRow[] }) {
             <th scope="col" className="w-44 py-3 pr-4 font-medium">Score</th>
             <th scope="col" className="py-3 pr-4 font-medium">Trend · 52 Wo.</th>
             <th scope="col" className="py-3 pr-4 text-right font-medium">Marge / Stück</th>
+            <th scope="col" className="py-3 pr-4 text-right font-medium">Werbung</th>
             <th scope="col" className="py-3 pr-4 font-medium">Quelle</th>
             <th scope="col" className="w-12 py-3 pr-4"><span className="sr-only">Link zum Lieferanten</span></th>
           </tr>
@@ -82,6 +105,9 @@ export function CandidateTable({ rows }: { rows: CandidateRow[] }) {
                   <div className="font-mono text-[11px] text-muted-foreground tabular">
                     {formatPercent(row.marginPct)} · VK {formatMoney(row.referencePrice, row.currency)}
                   </div>
+                </td>
+                <td className="py-3 pr-4 text-right align-top">
+                  <AdCell ads={row.breakdown.ads} />
                 </td>
                 <td className="py-3 pr-4 align-top text-xs text-muted-foreground">
                   <div>

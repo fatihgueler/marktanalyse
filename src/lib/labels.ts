@@ -5,6 +5,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   "google-shopping": "Google Shopping",
   "config-multiplikator": "Schätzung (Kategorie-Faktor)",
   claude: "Claude-Matching",
+  "meta-ad-library": "Meta Ad Library",
+  "tiktok-ads": "TikTok Ad Library",
 };
 
 export function sourceLabel(id: string): string {

@@ -381,6 +381,15 @@ export const radarConfig = {
     metaGraphVersion: "v26.0",
   },
 
+  calibration: {
+    /** Mindestanzahl Drops je Gruppe (Top und Flop), bevor eine Aussage angezeigt wird */
+    minPerGroup: 3,
+    /** Mittelwert-Abstand Top − Flop (0..1-Skala), ab dem eine Komponente „gut trennt“ */
+    strongDifference: 0.15,
+    /** darunter gilt eine Komponente als „trennt nicht“ */
+    weakDifference: 0.05,
+  },
+
   collect: {
     /** Parallele Requests je Quelle */
     concurrency: 3,

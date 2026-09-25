@@ -2,16 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, FlaskConical, TriangleAlert } from "lucide-react";
+import { AdActivity } from "@/components/ad-activity";
 import { AppHeader } from "@/components/app-header";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { DropFeedbackForm } from "@/components/drop-feedback-form";
 import { MarginBreakdown } from "@/components/margin-breakdown";
 import { ScoreBar, ScoreLegend } from "@/components/score-bar";
 import { ScoreBreakdown } from "@/components/score-breakdown";
 import { ScoreHistoryChart } from "@/components/score-history-chart";
 import { TrendChart } from "@/components/trend-chart";
 import { radarConfig, type CategoryId, type Country } from "@/config/radar.config";
-import { formatDateTime, formatMoney, formatNumber, formatPercent } from "@/lib/format";
+import { formatDateTime, formatMoney, formatNumber, formatPercent, formatWeek } from "@/lib/format";
 import { judgeLabel, sourceLabel } from "@/lib/labels";
-import { getCandidateDetail, type CandidateDetail } from "@/lib/queries";
+import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
+import { deleteDrop } from "./drop-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +40,12 @@ function summarize(candidate: CandidateDetail): string[] {
   lines.push(
     `Nach Versand, Zoll, Einfuhrumsatzsteuer und Gebühren bleiben ${formatMoney(margin.marginAbs, margin.currency)} je Stück (${formatPercent(margin.marginPct)} vom Nettoerlös).`,
   );
-  if (competition.resultCount !== null) {
-    const level = competition.score >= 0.5 ? "überschaubar" : "bereits hoch";
-    lines.push(`${formatNumber(competition.resultCount)} Angebote auf AliExpress – Wettbewerb ${level}.`);
+  const level = competition.score >= 0.5 ? "überschaubar" : "bereits hoch";
+  const ads = candidate.breakdown.ads;
+  if (ads?.covered) {
+    lines.push(`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür, ${formatNumber(competition.resultCount ?? 0)} Angebote auf AliExpress – Wettbewerb ${level}.`);
+  } else if (competition.resultCount !== null) {
+    lines.push(`${formatNumber(competition.resultCount)} Angebote auf AliExpress – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
   }
   return lines;
 }
@@ -49,6 +56,8 @@ export default async function ProductDetailPage({ params }: Params) {
   if (!candidate) notFound();
 
   const { breakdown } = candidate;
+  const dropOutcomes = await getDropOutcomes(candidate.productId, candidate.country, candidate.keyword);
+  const today = new Date().toISOString().slice(0, 10);
   const country = candidate.country as Country;
   const categoryLabel = radarConfig.categories[candidate.category as CategoryId]?.label ?? candidate.category;
   const demoSources = Object.entries(candidate.sourceModes).filter(([, mode]) => mode === "mock").map(([s]) => sourceLabel(s));
@@ -147,6 +156,14 @@ export default async function ProductDetailPage({ params }: Params) {
           <TrendChart series={candidate.series} recentWeeks={radarConfig.trend.recentWeeks} previousWeeks={radarConfig.trend.previousWeeks} />
         </section>
 
+        <section aria-labelledby="werbung-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="werbung-titel" className="text-lg font-semibold">Werbeaktivität · {country}</h2>
+            <p className="text-xs text-muted-foreground">Meta Ad Library &amp; TikTok Ad Library, aktive Anzeigen zum Keyword</p>
+          </div>
+          <AdActivity ads={breakdown.ads} country={country} />
+        </section>
+
         <section aria-labelledby="marge-block-titel" className="grid gap-4">
           <h2 id="marge-block-titel" className="text-lg font-semibold">Kalkulation</h2>
           <MarginBreakdown margin={breakdown.margin} referenceSourceLabel={referenceSourceLabel} />
@@ -159,6 +176,45 @@ export default async function ProductDetailPage({ params }: Params) {
           ) : (
             <p className="text-sm text-muted-foreground">Erst ein Lauf vorhanden – der Verlauf erscheint ab dem zweiten Lauf.</p>
           )}
+        </section>
+
+        <section aria-labelledby="drop-titel" className="grid gap-4 rounded-xl border bg-card p-4 sm:p-5">
+          <div>
+            <h2 id="drop-titel" className="text-lg font-semibold">Drop-Ergebnis</h2>
+            <p className="text-sm text-muted-foreground">
+              Habt ihr das Produkt gedroppt? Das Ergebnis fließt in die{" "}
+              <Link href="/kalibrierung" className="text-primary underline-offset-4 hover:underline">
+                Kalibrierung
+              </Link>{" "}
+              ein – verglichen mit den Scores dieses Laufs.
+            </p>
+          </div>
+          {dropOutcomes.length > 0 ? (
+            <ul className="grid gap-2" aria-label="Erfasste Ergebnisse">
+              {dropOutcomes.map((o) => (
+                <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/40 px-3 py-2 text-sm">
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="font-semibold">{o.verdict === "TOP" ? "Top" : o.verdict === "OK" ? "Okay" : "Flop"}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{formatWeek(o.droppedAt.toISOString().slice(0, 10))}</span>
+                    {o.unitsSold !== null ? <span className="font-mono text-xs">{formatNumber(o.unitsSold)} Stück</span> : null}
+                    {o.returnRate !== null ? <span className="font-mono text-xs">{formatPercent(o.returnRate, 1)} Retouren</span> : null}
+                    {o.note ? <span className="text-xs text-muted-foreground">„{o.note}“</span> : null}
+                  </span>
+                  <form action={deleteDrop}>
+                    <input type="hidden" name="id" value={o.id} />
+                    <input type="hidden" name="snapshotId" value={candidate.id} />
+                    <ConfirmSubmitButton
+                      message="Dieses Drop-Ergebnis wirklich löschen?"
+                      className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+                    >
+                      Löschen
+                    </ConfirmSubmitButton>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <DropFeedbackForm candidateSnapshotId={candidate.id} today={today} />
         </section>
 
         <footer className="grid gap-1 border-t pt-4 font-mono text-[11px] text-subtle-foreground">

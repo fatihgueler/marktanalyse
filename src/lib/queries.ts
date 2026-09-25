@@ -1,6 +1,7 @@
 // Nur aus Server Components aufrufen (nutzt Prisma).
 import { CATEGORY_IDS, COUNTRIES, type CategoryId, type Country } from "@/config/radar.config";
 import type { Prisma } from "@/generated/prisma/client";
+import type { CalibrationRow } from "@/scoring/calibration";
 import type { CandidateBreakdown } from "@/scoring/score";
 import type { TrendPoint } from "@/sources/types";
 import { getDb } from "./db";
@@ -116,3 +117,36 @@ export async function getCandidateDetail(id: string) {
 }
 
 export type CandidateDetail = NonNullable<Awaited<ReturnType<typeof getCandidateDetail>>>;
+
+export async function getDropOutcomes(productId: string, country: Country, keyword: string) {
+  return getDb().dropOutcome.findMany({
+    where: { productId, country, keyword },
+    // Bei gleichem Drop-Datum der zuletzt erfasste Eintrag zuerst – eindeutige Reihenfolge.
+    orderBy: [{ droppedAt: "desc" }, { createdAt: "desc" }],
+  });
+}
+
+/** Alle erfassten Drops mit den Scores des Snapshots, auf dessen Basis entschieden wurde. */
+export async function getCalibrationData() {
+  const outcomes = await getDb().dropOutcome.findMany({
+    orderBy: [{ droppedAt: "desc" }, { createdAt: "desc" }],
+    include: {
+      product: { select: { title: true } },
+      candidateSnapshot: { select: { id: true, trendScore: true, marginScore: true, competitionScore: true, totalScore: true, breakdown: true } },
+    },
+  });
+  return outcomes.map((o) => {
+    const breakdown = o.candidateSnapshot?.breakdown as unknown as CandidateBreakdown | undefined;
+    const row: CalibrationRow | null = o.candidateSnapshot
+      ? {
+          verdict: o.verdict,
+          trend: o.candidateSnapshot.trendScore,
+          margin: o.candidateSnapshot.marginScore,
+          competition: o.candidateSnapshot.competitionScore,
+          total: o.candidateSnapshot.totalScore,
+          adMomentum: breakdown?.ads?.covered ? breakdown.ads.momentum.growth : null,
+        }
+      : null;
+    return { ...o, row };
+  });
+}
