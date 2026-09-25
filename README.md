@@ -110,7 +110,7 @@ Weil viele offizielle APIs nicht zu bekommen sind, bindet der Radar zwei Quellen
 | Quelle | Rolle | Länder | Apify-Actor (Config `scraping.*.actorId`) |
 |---|---|---|---|
 | TikTok Creative Center, Trend-Hashtags | Trendquelle: Hashtag-Popularität der letzten 120 Tage | DE, GB | `memo23~tiktok-trending-hashtags-scraper` |
-| 1688.com Produktsuche | Einkaufsquelle mit Großhandels-Kalkulation | DE, AT (Lager in DE) | `songd~1688-search-scraper` |
+| 1688.com Produktsuche | Einkaufsquelle mit Großhandels-Kalkulation | DE, AT (Lager in DE) | `memo23~1688-wholesale-scraper` |
 
 **So funktioniert es**
 - Das Scraping führt der Datendienst **Apify** aus. Es gibt keine eigenen Scraper und keinen Code, der Bot-Schutz umgeht. Aufruf über die Apify-REST-API, keine zusätzliche Abhängigkeit.
@@ -120,7 +120,8 @@ Weil viele offizielle APIs nicht zu bekommen sind, bindet der Radar zwei Quellen
 
 **Kosten**
 - Jeder Actor-Lauf hat eine **harte Kostengrenze** (`maxTotalChargeUsd`, Config `scraping.*.maxChargeUsd`). Es gibt **keine automatischen Wiederholungen**, weil jeder Versuch kostet.
-- Der 1688-Actor verlangt zusätzlich eine Monatsmiete (laut Actor-Seite ca. 30 $). Beide Actors müsst ihr in Apify einmal abonnieren.
+- Beide Actors rechnen **pro Ergebnis** ab, ohne Monatsmiete: TikTok ca. 1,50 $ je 1.000 Hashtags, 1688 ab 2 $ je 1.000 Angebote. Der 1688-Actor braucht Residential-Proxys, deren Datenverbrauch zusätzlich vom Guthaben abgeht.
+- **Gratis-Plan von Apify:** 5 $ Guthaben pro Monat. Ein wöchentlicher Lauf kostet grob 0,30 $ (TikTok, 2 Länder) plus bis zu 0,80 $ (1688, 50 Suchen × 8 Angebote), also etwa 1–5 $ im Monat. Das passt voraussichtlich ins Gratis-Guthaben; die Proxy-Kosten sind der unsichere Teil. Wird es knapp: `resultsPerKeyword` oder `demand.maxKeywordsPerCountry` senken. Nächster Plan: Starter für 19 $/Monat.
 - Der `--live`-Schutz gilt auch hier: `npm run collect` zeigt vor dem Start die geschätzten Kosten.
 
 **Risiken, die ihr bewusst tragt**

@@ -44,6 +44,40 @@ describe("normalize1688Item", () => {
     });
   });
 
+  it("liest das Format des Actors memo23~1688-wholesale-scraper", () => {
+    const record = normalize1688Item(
+      {
+        offerId: "629791812713",
+        title: "云朵灯 LED",
+        offerUrl: "https://detail.1688.com/offer/629791812713.html",
+        priceValue: 3.8,
+        currency: "CNY",
+        tierPricing: [
+          { minQuantity: 50, unitPrice: 3.2 },
+          { minQuantity: 2, unitPrice: 3.5 },
+        ],
+        moq: 2,
+        soldCount: 1200,
+        images: ["https://cbu01.alicdn.com/a.jpg"],
+      },
+      "cloud lamp",
+      "DE",
+      new Date(0),
+    );
+    expect(record).toMatchObject({
+      externalId: "629791812713",
+      price: 3.8,
+      priceTiers: [
+        { minQty: 2, price: 3.5 },
+        { minQty: 50, price: 3.2 },
+      ],
+      moq: 2,
+      orders30d: 1200,
+      imageUrl: "https://cbu01.alicdn.com/a.jpg",
+      url: "https://detail.1688.com/offer/629791812713.html",
+    });
+  });
+
   it("verwirft Einträge ohne ID, Titel oder Preis", () => {
     expect(normalize1688Item({ title: "x" }, "k", "DE", new Date(0))).toBeNull();
   });

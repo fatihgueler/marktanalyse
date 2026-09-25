@@ -208,7 +208,7 @@ Technische Details aus der Doku:
 | Quelle | Actor (Config) | Rolle | Länder |
 |---|---|---|---|
 | TikTok Creative Center, Trend-Hashtags | `memo23~tiktok-trending-hashtags-scraper` | `TrendSource`: Hashtags mit Popularitätskurve (120 Tage, 0–100) | laut Actor 27 Märkte; konfiguriert DE, GB |
-| 1688 Produktsuche | `songd~1688-search-scraper` | `SupplySource` mit **Großhandels-Kalkulation** (Staffelpreise, Losgröße, Agent, Fracht, regulärer Zoll) | nur DE, AT (Lager in DE) |
+| 1688 Produktsuche | `memo23~1688-wholesale-scraper` (pro Ergebnis, keine Miete) | `SupplySource` mit **Großhandels-Kalkulation** (Staffelpreise, Losgröße, Agent, Fracht, regulärer Zoll) | nur DE, AT (Lager in DE) |
 
 **Hashtag → Suchbegriff:** Trend-Hashtags sind oft keine Produkte (#fyp, #fußball). Claude entscheidet, ob ein Hashtag ein Produkt ist, und leitet einen Suchbegriff ab. Im Mock-Modus übernimmt eine Heuristik (Zerlegung in bekannte Produktwörter).
 

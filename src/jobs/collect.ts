@@ -82,9 +82,8 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   }
   if (modes["alibaba-1688"] === "live") {
     const searches = radarConfig.wholesale.countries.length * maxKeywordsPerCountry;
-    lines.push(
-      `Apify 1688 (Scraping): bis zu ${searches} Suchen, geschätzt ${(searches * scraping.alibaba1688.usdPerSearchEstimate).toFixed(2)} $ (je Suche hart begrenzt auf ${scraping.alibaba1688.maxChargeUsd} $) + Actor-Miete`,
-    );
+    const usd = (searches * scraping.alibaba1688.resultsPerKeyword * scraping.alibaba1688.usdPerThousandResults) / 1000;
+    lines.push(`Apify 1688 (Scraping): bis zu ${searches} Suchen, höchstens ca. ${usd.toFixed(2)} $ + ggf. Proxy-Kosten (je Suche hart begrenzt auf ${scraping.alibaba1688.maxChargeUsd} $)`);
   }
   if (modes.claude === "live") {
     lines.push(`Claude (${process.env.ANTHROPIC_MODEL ?? "Standardmodell"}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);

@@ -405,14 +405,13 @@ export const radarConfig = {
       minCoverage: 0.8,
     },
     alibaba1688: {
-      actorId: "songd~1688-search-scraper",
-      /** Seiten je Suche (1 Seite ≈ 100 Produkte) */
-      maxPages: 1,
-      /** Angebote, die je Keyword übernommen werden */
+      /** Abrechnung pro Ergebnis, keine Monatsmiete – passt ins Gratis-Guthaben von Apify */
+      actorId: "memo23~1688-wholesale-scraper",
+      /** Angebote, die je Keyword geladen und übernommen werden (bestimmt die Kosten) */
       resultsPerKeyword: 8,
       maxChargeUsd: 0.5,
-      /** ANNAHME: Mietpreis 30 $/Monat + Plattformkosten; je Suche grob geschätzt */
-      usdPerSearchEstimate: 0.05,
+      /** ANNAHME: Preis laut Actor-Seite („ab 2 $ / 1.000 Angebote“), nur für die Kostenschätzung; Proxy-Kosten kommen ggf. hinzu */
+      usdPerThousandResults: 2,
     },
   },
 
