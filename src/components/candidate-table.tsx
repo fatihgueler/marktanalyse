@@ -20,6 +20,13 @@ function growthLabel(growth: number): string {
 }
 
 
+/** „neue Anz.: +100 %“ – bei ganz neuer oder fehlender Werbung nur der Klartext, ohne doppeltes „neu“. */
+function adMomentumText(ads: AdsBreakdown): string {
+  const { growth, recent } = ads.momentum;
+  const label = momentumLabel(growth, recent);
+  return growth === null || (growth === 0 && recent === 0) ? label : `neue Anz.: ${label}`;
+}
+
 /** Werbetreibende im Zielland + Marktdynamik; „–“, wenn das Land nicht abgedeckt ist (CH, GB). */
 function AdCell({ ads }: { ads: AdsBreakdown | undefined }) {
   if (!ads?.covered) {
@@ -35,7 +42,7 @@ function AdCell({ ads }: { ads: AdsBreakdown | undefined }) {
         {ads.capped ? "≥ " : ""}
         {formatNumber(ads.advertisers ?? 0)}
       </div>
-      <div className="font-mono text-[11px] text-muted-foreground tabular">neu: {momentumLabel(ads.momentum.growth, ads.momentum.recent)}</div>
+      <div className="font-mono text-[11px] text-muted-foreground tabular">{adMomentumText(ads)}</div>
     </>
   );
 }
