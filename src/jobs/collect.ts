@@ -489,8 +489,20 @@ async function main(): Promise<number> {
     console.log(`  ${source.padEnd(16)} ${mode === "live" ? "LIVE" : "Mock (kein Key)"}`);
   }
 
+  // --if-empty: Start-Modus für Deployments (Railway Pre-Deploy). Füllt eine leere Datenbank einmalig
+  // mit Demo-Daten und tut sonst nichts. Bricht einen Deploy nie ab und verursacht nie Kosten.
+  const ifEmpty = process.argv.includes("--if-empty");
+  if (ifEmpty && (await getDb().run.count()) > 0) {
+    console.log("\n--if-empty: Es gibt bereits Läufe – nichts zu tun.");
+    return 0;
+  }
+
   const liveCosts = estimateLiveRequests(modes);
   if (liveCosts.length > 0) {
+    if (ifEmpty) {
+      console.log("\n--if-empty: Mindestens eine Quelle ist live – kein automatischer Lauf beim Deploy (Kostenschutz).");
+      return 0;
+    }
     console.log("\nKostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):");
     for (const line of liveCosts) console.log(`  • ${line}`);
     if (!liveFlag) {

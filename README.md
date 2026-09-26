@@ -17,7 +17,7 @@ Next.js 15 (App Router) · TypeScript strict · Tailwind CSS 4 · shadcn/ui · P
 
 ## Schnellstart (lokal, Demo-Modus)
 
-Voraussetzungen: Node.js ≥ 20.19 und eine PostgreSQL-Datenbank (≥ 14).
+Voraussetzungen: Node.js 22 und eine PostgreSQL-Datenbank (≥ 14).
 
 ```bash
 # 1. Abhängigkeiten (generiert auch den Prisma Client)
@@ -182,9 +182,15 @@ Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch
 
 ## Deployment auf Railway
 
-1. Neues Projekt aus dem Repository anlegen und das **PostgreSQL**-Plugin hinzufügen.
-2. **Service „web“:** Build `npm run build`, Start `npm run start`, Pre-Deploy-Command `npm run db:deploy`. Variablen: `DATABASE_URL` (Referenz auf das Plugin), `DASHBOARD_PASSWORD`, `SESSION_SECRET`.
-3. **Service „collect“** (gleiches Repository): Start-Command `npm run collect -- --live`, Cron-Schedule z. B. `0 5 * * 1` (montags 05:00 UTC, dann sind die Google-Trends-Wochenwerte der Vorwoche vollständig). Variablen: `DATABASE_URL` sowie die API-Keys. Der Exit-Code ist ≠ 0, wenn der Lauf fehlschlägt.
+Bewusst ohne `railway.json`: Eine Konfigurationsdatei im Repo würde die Dashboard-Einstellungen aller Dienste aus diesem Repo überschreiben, also auch die des wöchentlichen Laufs. Build- und Start-Befehl erkennt Railway selbst (`npm run build`, `npm run start`), Node 22 kommt aus `engines` in `package.json`.
+
+1. Neues Projekt aus dem GitHub-Repository anlegen und eine **PostgreSQL**-Datenbank hinzufügen.
+2. **Service „web“** (das Repository):
+   - Settings → Source: Branch wählen, auf dem der Code liegt.
+   - Settings → Deploy → Pre-Deploy Command: `npm run db:deploy && npm run collect -- --if-empty`. Das spielt die Migrationen ein und füllt eine **leere** Datenbank einmalig mit Demo-Daten. Sobald ein echter API-Key gesetzt ist, startet es beim Deploy keinen Lauf mehr (Kostenschutz) und bricht den Deploy auch nicht ab.
+   - Variables: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`, `DASHBOARD_PASSWORD`, `SESSION_SECRET` (mind. 32 Zeichen).
+   - Settings → Networking → „Generate Domain“.
+3. **Service „collect“** (optional, erst mit echten API-Keys sinnvoll; gleiches Repository): Start Command `npm run collect -- --live`, Cron Schedule z. B. `45 4 * * 1` (montags 04:45 UTC, die Google-Trends-Wochenwerte der Vorwoche sind dann vollständig), Restart Policy „Never“. Variablen: `DATABASE_URL` wie oben sowie die API-Keys. Der Exit-Code ist ≠ 0, wenn der Lauf fehlschlägt.
 
 ## Projektstruktur
 
