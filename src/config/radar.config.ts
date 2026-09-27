@@ -526,6 +526,11 @@ export const radarConfig = {
     runsPerMonth: 4.33,
     /** SerpApi-Plan „Starter“ (25 $/Monat). Gratis-Plan: 250 – dann Keywords/Lookups deutlich senken. */
     serpApiMonthlySearches: 1000,
+    /**
+     * Mindestens so viele SerpApi-Suchen müssen im Kontingent übrig sein, sonst fällt der Lauf aus.
+     * ANNAHME: Darunter reicht es nach der Keyword-Suche (Seeds) kaum noch für Kurven und Preise.
+     */
+    serpApiMinSearchesPerRun: 100,
     /** Apify-Gratis-Plan: 5 $ Guthaben pro Monat */
     apifyMonthlyUsd: 5,
   },

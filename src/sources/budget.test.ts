@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { perRunBudget, worstCaseApifyUsd, worstCaseSerpApiSearches, validateConfig } from "@/config/config-check";
 import { radarConfig } from "@/config/radar.config";
 import { makeTestConfig } from "@/scoring/test-config";
-import { SearchBudget } from "./budget";
+import { SearchBudget, quotaDecision } from "./budget";
 
 describe("SearchBudget", () => {
   it("gibt genau `limit` Aufrufe frei", () => {
@@ -38,5 +38,27 @@ describe("Kostenrahmen der Config", () => {
     const config = makeTestConfig();
     config.scraping.alibaba1688.maxSearchesPerCountry = 100;
     expect(() => validateConfig(config)).toThrow(/Apify/);
+  });
+});
+
+describe("quotaDecision", () => {
+  it("läuft normal, solange das Kontingent für einen vollen Lauf reicht", () => {
+    expect(quotaDecision(900, 230, 100)).toEqual({ action: "ok", limit: 230 });
+  });
+  it("kappt das Budget auf den Rest, wenn es knapp wird", () => {
+    expect(quotaDecision(150, 230, 100)).toEqual({ action: "cap", limit: 150 });
+  });
+  it("lässt den Lauf aus, wenn zu wenig übrig ist (z. B. 26 Suchen im Gratis-Plan)", () => {
+    expect(quotaDecision(26, 230, 100)).toEqual({ action: "skip", limit: 0 });
+  });
+});
+
+describe("SearchBudget.capTo", () => {
+  it("senkt das Budget, erhöht es aber nie", () => {
+    const budget = new SearchBudget("Test", 10);
+    budget.capTo(3);
+    expect(budget.limit).toBe(3);
+    budget.capTo(50);
+    expect(budget.limit).toBe(3);
   });
 });

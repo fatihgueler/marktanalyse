@@ -24,7 +24,9 @@ import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { createDbTokenStore } from "@/lib/token-store";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
 import { loadFxRates, withFx, type FxInfo } from "@/sources/fx/ecb";
+import { quotaDecision } from "@/sources/budget";
 import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
+import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
 import type { AdRecord, DemandRecord, MarketRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
@@ -562,6 +564,30 @@ async function main(): Promise<number> {
     if (!liveFlag) {
       console.error("\nAbbruch: Mindestens eine Quelle läuft live. Zum Bestätigen mit `npm run collect -- --live` starten.");
       return 2;
+    }
+  }
+
+  // Restkontingent bei SerpApi prüfen (kostenlos): Budget kappen oder den Lauf auslassen, statt mitten
+  // im Lauf ins Leere zu laufen.
+  if (sources.serpApiBudget && env.SERPAPI_API_KEY) {
+    try {
+      const { left } = await fetchSerpApiAccount(env.SERPAPI_API_KEY);
+      if (left !== null) {
+        const decision = quotaDecision(left, sources.serpApiBudget.limit, radarConfig.budget.serpApiMinSearchesPerRun);
+        if (decision.action === "skip") {
+          console.error(
+            `\nLauf übersprungen: Bei SerpApi sind nur noch ${left} Suchen übrig, ein sinnvoller Lauf braucht mindestens ` +
+              `${radarConfig.budget.serpApiMinSearchesPerRun}. Bis zur Erneuerung des Kontingents warten oder den Plan aufstocken.`,
+          );
+          return 3;
+        }
+        if (decision.action === "cap") {
+          sources.serpApiBudget.capTo(decision.limit);
+          console.log(`  SerpApi: nur noch ${left} Suchen übrig – Budget dieses Laufs auf ${decision.limit} gesenkt.`);
+        }
+      }
+    } catch (error) {
+      console.warn(`  SerpApi-Kontostand nicht abrufbar (${errorMessage(error)}) – Lauf nutzt das Budget laut Config.`);
     }
   }
 

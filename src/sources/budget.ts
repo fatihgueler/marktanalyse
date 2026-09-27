@@ -7,8 +7,17 @@ export class SearchBudget {
 
   constructor(
     readonly label: string,
-    readonly limit: number,
+    private max: number,
   ) {}
+
+  get limit(): number {
+    return this.max;
+  }
+
+  /** Senkt das Budget, z. B. auf das Restkontingent des Anbieters; erhöht es nie. */
+  capTo(limit: number): void {
+    this.max = Math.max(0, Math.min(this.max, limit));
+  }
 
   /** Reserviert einen Aufruf; false, wenn das Budget erschöpft ist. */
   tryTake(): boolean {
@@ -25,4 +34,14 @@ export class SearchBudget {
   get consumed(): number {
     return this.used;
   }
+}
+
+/**
+ * Entscheidet vor einem Lauf anhand des Restkontingents beim Anbieter: normal laufen, Budget kappen
+ * oder den Lauf auslassen, weil zu wenig übrig ist, um überhaupt genug Keywords zu finden.
+ */
+export function quotaDecision(left: number, perRunLimit: number, minUseful: number): { action: "ok" | "cap" | "skip"; limit: number } {
+  if (left < minUseful) return { action: "skip", limit: 0 };
+  if (left < perRunLimit) return { action: "cap", limit: left };
+  return { action: "ok", limit: perRunLimit };
 }

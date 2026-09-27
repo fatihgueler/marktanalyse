@@ -31,6 +31,7 @@ import { PinterestAuth, PinterestTrendsSource } from "@/sources/demand/pinterest
 import { loadFxRates } from "@/sources/fx/ecb";
 import { EbaySource } from "@/sources/market/ebay";
 import { fetchJson } from "@/sources/http";
+import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { GoogleShoppingSerpApiSource } from "@/sources/price/google-shopping.serpapi";
 import { mixedModeWarnings } from "@/sources/readiness";
 import { createSources, describeModes } from "@/sources/registry";
@@ -64,12 +65,6 @@ async function attempt(run: () => Promise<Outcome>): Promise<Outcome> {
   }
 }
 
-const serpAccountSchema = z.looseObject({
-  plan_name: z.string().optional(),
-  searches_per_month: z.number().optional(),
-  total_searches_left: z.number().optional(),
-  plan_searches_left: z.number().optional(),
-});
 
 const apifyLimitsSchema = z.object({
   data: z.looseObject({
@@ -85,13 +80,15 @@ async function checkDatabase(): Promise<Outcome> {
 
 async function checkSerpApi(key: string | undefined): Promise<Outcome> {
   if (!key) return { status: "aus", detail: "SERPAPI_API_KEY fehlt → Google Trends und Referenzpreise laufen mit Demo-Daten" };
-  const account = serpAccountSchema.parse(await fetchJson<unknown>(`https://serpapi.com/account.json?api_key=${encodeURIComponent(key)}`));
-  const left = account.total_searches_left ?? account.plan_searches_left;
+  const account = await fetchSerpApiAccount(key);
+  const left = account.left;
   const perRun = worstCaseSerpApiSearches();
-  const runs = left === undefined ? "?" : String(Math.floor(left / perRun));
+  const minUseful = radarConfig.budget.serpApiMinSearchesPerRun;
+  const runs = left === null ? "?" : String(Math.floor(left / perRun));
+  const tooLow = left !== null && left < minUseful ? ` – zu wenig für einen Lauf (mind. ${minUseful}), der nächste Lauf fällt bis zur Erneuerung aus` : "";
   return {
-    status: left !== undefined && left < perRun ? "hinweis" : "ok",
-    detail: `Plan „${account.plan_name ?? "?"}“, noch ${left ?? "?"} von ${account.searches_per_month ?? "?"} Suchen diesen Monat → reicht für ${runs} Läufe (je höchstens ${perRun})`,
+    status: left !== null && left < perRun ? "hinweis" : "ok",
+    detail: `Plan „${account.planName ?? "?"}“, noch ${left ?? "?"} von ${account.perMonth ?? "?"} Suchen diesen Monat → reicht für ${runs} volle Läufe (je höchstens ${perRun})${tooLow}`,
   };
 }
 
