@@ -9,6 +9,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   "tiktok-ads": "TikTok Ad Library",
   "tiktok-trends": "TikTok Creative Center",
   "alibaba-1688": "1688",
+  betrieb: "Betrieb",
 };
 
 export function sourceLabel(id: string): string {

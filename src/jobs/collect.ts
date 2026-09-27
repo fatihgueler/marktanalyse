@@ -22,6 +22,7 @@ import { calculateMargin, calculateWholesaleMargin, fallbackReferencePrice } fro
 import { totalScore, type CandidateBreakdown } from "@/scoring/score";
 import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
+import { mixedModeWarnings } from "@/sources/readiness";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
 import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
@@ -511,7 +512,8 @@ async function main(): Promise<number> {
     }
   }
 
-  const warnings: RunError[] = [];
+  const warnings: RunError[] = mixedModeWarnings(modes).map((message) => ({ level: "warnung", source: "betrieb", message }));
+  for (const warning of warnings) console.warn(`\nWarnung: ${warning.message}`);
   if (modes["meta-ad-library"] === "live" && env.META_ACCESS_TOKEN && env.META_APP_ID && env.META_APP_SECRET) {
     try {
       const daysLeft = await metaTokenDaysLeft(env.META_ACCESS_TOKEN, env.META_APP_ID, env.META_APP_SECRET);

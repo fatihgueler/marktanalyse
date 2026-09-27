@@ -50,6 +50,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `npm run dev` | Dashboard im Entwicklungsmodus |
 | `npm run build` / `npm run start` | Production-Build / -Server |
 | `npm run collect` | Ein kompletter Datenlauf (Snapshot). Mit echten Keys: `npm run collect -- --live` |
+| `npm run check` | Verbindungstest: prüft jeden gesetzten Key kostenlos (SerpApi-Kontingent, Apify-Guthaben, Ablauf des Meta-Tokens …). Mit `-- --probe` zusätzlich je eine echte Abfrage der kostenpflichtigen Quellen (3 SerpApi-Suchen, höchstens ~0,25 $ Apify). |
 | `npm test` | Unit-Tests (Scoring, Marge, Wettbewerb, Matching, Signatur) |
 | `npm run db:migrate` | Migrationen lokal anwenden/erstellen |
 | `npm run db:deploy` | Migrationen in Produktion anwenden |
@@ -74,6 +75,24 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `APIFY_TOKEN` | nein | Scraping-Dienst [Apify](https://apify.com) für TikTok Creative Center und 1688. Leer → Demo-Modus. **Siehe Abschnitt „Scraping“.** |
 
 Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
+
+## Go-live: Was noch fehlt, sind Keys und Zahlungen
+
+Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei Diensten eine Zahlung.
+
+| Schritt | Dienst | Kosten | Vorlauf | Variable(n) |
+|---|---|---|---|---|
+| 1 | [SerpApi](https://serpapi.com/pricing) Starter | 25 $/Monat | sofort | `SERPAPI_API_KEY` |
+| 2 | [Anthropic Console](https://console.anthropic.com), Guthaben aufladen (z. B. 10 $) | ca. 3 $/Monat | sofort | `ANTHROPIC_API_KEY` |
+| 3 | [AliExpress Open Platform](https://openservice.aliexpress.com), Affiliate-App | kostenlos | einige Tage (Prüfung der App) | `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET`, `ALIEXPRESS_TRACKING_ID` |
+| 4 | [Apify](https://apify.com), Gratis-Plan | 0 $ (5 $ Guthaben/Monat) | sofort | `APIFY_TOKEN` |
+| 5 | Meta Ad Library (Identitätsprüfung + App) | kostenlos | 1–3 Tage (Ausweisprüfung) | `META_ACCESS_TOKEN`, `META_APP_ID`, `META_APP_SECRET` |
+| 6 | TikTok Commercial Content API | kostenlos | Wochen, Zulassung unsicher | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
+
+- **Minimum für verwertbare Ergebnisse: 1 + 2 + 3.** Werbedaten (5, 6) und Scraping (4) verbessern den Score, sind aber optional. Wer nur einen Teil live schaltet (z. B. echte Trends, aber Demo-Angebote), bekommt eine Warnung im Lauf und im Dashboard, weil echte und Demo-Daten dann gemischt würden.
+- Anträge mit Vorlauf (3, 5, 6) **zuerst** stellen.
+- Nach jedem neuen Key: `npm run check`. Vor dem ersten echten Lauf einmal `npm run check -- --probe`.
+- Dann `npm run collect -- --live`. Auf Railway beides über den Service „collect“, siehe [Deployment](#deployment-auf-railway).
 
 ## Von Demo-Daten auf echte APIs umstellen
 
@@ -101,7 +120,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
    Erst `npm run collect -- --live` ruft die APIs tatsächlich auf. Die Mengen steuern `demand.maxSeedsPerCountry` und `demand.maxKeywordsPerCountry` in der Config.
 8. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
 
-Hinweis zur Live-Anbindung: Die Adapter für SerpApi und AliExpress sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet**. Beim ersten Live-Lauf lohnt ein Blick in die Fehlerliste des Laufs (Ausgabe von `collect` und `Run.errors`).
+Hinweis zur Live-Anbindung: Die Adapter sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet** (nur die Fehlerfälle mit ungültigen Keys). Deshalb vor dem ersten Lauf `npm run check -- --probe`: Es ruft jede Quelle einmal über denselben Code wie der Lauf auf und zeigt, ob die Antworten passen. Fehler und Warnungen eines Laufs stehen im Dashboard unter dem Lauf-Status.
 
 ## Scraping (Phase 2b)
 
@@ -187,10 +206,10 @@ Bewusst ohne `railway.json`: Eine Konfigurationsdatei im Repo würde die Dashboa
 1. Neues Projekt aus dem GitHub-Repository anlegen und eine **PostgreSQL**-Datenbank hinzufügen.
 2. **Service „web“** (das Repository):
    - Settings → Source: Branch wählen, auf dem der Code liegt.
-   - Settings → Deploy → Pre-Deploy Command: `npm run db:deploy && npm run collect -- --if-empty`. Das spielt die Migrationen ein und füllt eine **leere** Datenbank einmalig mit Demo-Daten. Sobald ein echter API-Key gesetzt ist, startet es beim Deploy keinen Lauf mehr (Kostenschutz) und bricht den Deploy auch nicht ab.
-   - Variables: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`, `DASHBOARD_PASSWORD`, `SESSION_SECRET` (mind. 32 Zeichen).
+   - Settings → Deploy → Pre-Deploy Command: `npm run db:deploy && npm run collect -- --if-empty && (npm run check || true)`. Das spielt die Migrationen ein und füllt eine **leere** Datenbank einmalig mit Demo-Daten. Sobald ein echter API-Key gesetzt ist, startet es beim Deploy keinen Lauf mehr (Kostenschutz) und bricht den Deploy auch nicht ab. Danach steht der kostenlose Verbindungstest im Deploy-Log (Deployments → Pre-Deploy-Logs). Ein falscher Key blockiert den Deploy nicht.
+   - Variables: `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`, `DASHBOARD_PASSWORD`, `SESSION_SECRET` (mind. 32 Zeichen). Die API-Keys hier ebenfalls eintragen, damit der Verbindungstest sie beim Deploy prüft. Am einfachsten über „Raw Editor“: den Inhalt der `.env`-Zeilen einfügen.
    - Settings → Networking → „Generate Domain“.
-3. **Service „collect“** (optional, erst mit echten API-Keys sinnvoll; gleiches Repository): Start Command `npm run collect -- --live`, Cron Schedule z. B. `45 4 * * 1` (montags 04:45 UTC, die Google-Trends-Wochenwerte der Vorwoche sind dann vollständig), Restart Policy „Never“. Variablen: `DATABASE_URL` wie oben sowie die API-Keys. Der Exit-Code ist ≠ 0, wenn der Lauf fehlschlägt.
+3. **Service „collect“** (optional, erst mit echten API-Keys sinnvoll; gleiches Repository): Start Command `npm run collect -- --live`, Cron Schedule z. B. `45 4 * * 1` (montags 04:45 UTC, die Google-Trends-Wochenwerte der Vorwoche sind dann vollständig), Restart Policy „Never“. Variablen: `DATABASE_URL` wie oben sowie die API-Keys (per „Raw Editor“ dieselben Zeilen wie beim Web-Service). Vor dem ersten Lauf einmalig den Start Command auf `npm run check -- --probe` setzen, „Run now“, Log prüfen, dann zurück auf `npm run collect -- --live` und erneut „Run now“. Der Exit-Code ist ≠ 0, wenn der Lauf fehlschlägt.
 
 ## Projektstruktur
 

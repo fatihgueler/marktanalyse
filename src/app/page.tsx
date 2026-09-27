@@ -2,7 +2,7 @@ import { Radar, SearchX } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { CandidateTable } from "@/components/candidate-table";
 import { FilterBar } from "@/components/filter-bar";
-import { RunStatus } from "@/components/run-status";
+import { RunStatus, type RunNote } from "@/components/run-status";
 import { ScoreLegend } from "@/components/score-bar";
 import { CATEGORY_IDS, COUNTRIES, radarConfig } from "@/config/radar.config";
 import { getCandidates, getCategoryCounts, getLatestRun, parseFilters } from "@/lib/queries";
@@ -48,8 +48,7 @@ async function Dashboard({
 }) {
   const [rows, categoryCounts] = await Promise.all([getCandidates(runId, filters), getCategoryCounts(runId, filters.country)]);
   const aboveMin = rows.filter((r) => !r.belowMinMargin).length;
-  // Warnungen (z. B. Token läuft bald ab) zählen nicht als Fehler
-  const errors = Array.isArray(run.errors) ? run.errors.filter((e) => (e as { level?: string } | null)?.level !== "warnung").length : 0;
+  const notes = Array.isArray(run.errors) ? (run.errors as unknown as RunNote[]) : [];
 
   return (
     <>
@@ -72,7 +71,7 @@ async function Dashboard({
             </div>
           </dl>
         </div>
-        <RunStatus startedAt={run.startedAt} status={run.status} sourceModes={run.sourceModes as Record<string, string>} errorCount={errors} />
+        <RunStatus startedAt={run.startedAt} status={run.status} sourceModes={run.sourceModes as Record<string, string>} notes={notes} />
       </section>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">

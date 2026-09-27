@@ -14,7 +14,11 @@ const MAX_SEARCH_TERM = 50;
 /** Token 60 s vor Ablauf erneuern */
 const TOKEN_SAFETY_MS = 60_000;
 
-const tokenSchema = z.object({ access_token: z.string(), expires_in: z.number() });
+const tokenSchema = z.union([
+  z.object({ access_token: z.string(), expires_in: z.number() }),
+  // Falsche Zugangsdaten kommen als HTTP 200 mit Fehlerfeldern zurück
+  z.object({ error: z.string(), error_description: z.string().optional() }),
+]);
 
 const querySchema = z.object({
   data: z
@@ -66,6 +70,7 @@ export class TikTokAdsSource implements AdSignalSource {
       body: new URLSearchParams({ client_key: this.clientKey, client_secret: this.clientSecret, grant_type: "client_credentials" }).toString(),
     });
     const parsed = tokenSchema.parse(json);
+    if ("error" in parsed) throw new Error(`TikTok-Anmeldung fehlgeschlagen: ${parsed.error_description ?? parsed.error}`);
     this.token = { value: parsed.access_token, expiresAt: Date.now() + parsed.expires_in * 1000 - TOKEN_SAFETY_MS };
     return parsed.access_token;
   }
