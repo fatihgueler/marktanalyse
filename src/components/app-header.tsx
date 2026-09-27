@@ -8,6 +8,7 @@ import { RadarMark } from "./radar-mark";
 const NAV = [
   { href: "/", label: "Rangliste", key: "rangliste" },
   { href: "/kalibrierung", label: "Kalibrierung", key: "kalibrierung" },
+  { href: "/quellen", label: "Quellen", key: "quellen" },
 ] as const;
 
 export function AppHeader({ active }: { active?: (typeof NAV)[number]["key"] }) {
@@ -37,9 +38,9 @@ export function AppHeader({ active }: { active?: (typeof NAV)[number]["key"] }) 
           ))}
         </nav>
         <form action={logout}>
-          <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground">
+          <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground" aria-label="Abmelden">
             <LogOut aria-hidden="true" />
-            Abmelden
+            <span className="hidden sm:inline">Abmelden</span>
           </Button>
         </form>
       </div>

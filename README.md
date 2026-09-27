@@ -76,8 +76,8 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
 | `APIFY_TOKEN` | nein | Scraping-Dienst [Apify](https://apify.com) für TikTok Creative Center und 1688. Leer → Demo-Modus. **Siehe Abschnitt „Scraping“.** |
 | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | nein | [eBay Browse API](https://developer.ebay.com), kostenlos: Angebotszahl und Preise im Zielland. Leer → Demo-Modus. |
-| `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_REFRESH_TOKEN` | nein | [Pinterest Trends API](https://developers.pinterest.com), kostenlos. Der Radar erneuert den Zugang selbst. |
-| `PINTEREST_ACCESS_TOKEN` | nein | Alternative zu den drei Pinterest-Werten, läuft aber nach 30 Tagen ab. |
+| `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET` | nein | [Pinterest Trends API](https://developers.pinterest.com), kostenlos. Danach im Dashboard unter „Quellen“ auf „Mit Pinterest verbinden“ klicken; der Radar erneuert den Zugang dann selbst. |
+| `PINTEREST_REFRESH_TOKEN`, `PINTEREST_ACCESS_TOKEN` | nein | Nur für Sonderfälle: Refresh-Token von Hand statt über den Button bzw. ein Access-Token ohne Erneuerung (läuft ab). |
 
 Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
 
@@ -94,7 +94,7 @@ Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei 
 | 5 | Meta Ad Library (Identitätsprüfung + App) | kostenlos | 1–3 Tage (Ausweisprüfung) | `META_ACCESS_TOKEN`, `META_APP_ID`, `META_APP_SECRET` |
 | 6 | TikTok Commercial Content API | kostenlos | Wochen, Zulassung unsicher | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 | 7 | [eBay Developers Program](https://developer.ebay.com), Production-Keyset | kostenlos | 1 Tag (Konto-Freischaltung) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
-| 8 | [Pinterest Developers](https://developers.pinterest.com), App mit Trends-Zugriff | kostenlos | einige Tage (App-Prüfung) | `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_REFRESH_TOKEN` |
+| 8 | [Pinterest Developers](https://developers.pinterest.com), App mit Trends-Zugriff, dann „Mit Pinterest verbinden“ im Dashboard | kostenlos | einige Tage (App-Prüfung) | `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET` |
 | – | EZB-Wechselkurse | kostenlos | keiner, läuft automatisch | – |
 
 - **Minimum für verwertbare Ergebnisse: 1 + 2 + 3 + 7.** Werbedaten (5, 6), Scraping (4) und Pinterest (8) verbessern den Score, sind aber optional.
@@ -120,10 +120,11 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 6. **eBay (kostenlos, 5.000 Abfragen am Tag):** Auf [developer.ebay.com](https://developer.ebay.com) registrieren, unter „Application Keys“ ein **Production**-Keyset erzeugen, App ID als `EBAY_CLIENT_ID` und Cert ID als `EBAY_CLIENT_SECRET` eintragen. Je Keyword und Land sucht der Radar Neuware zum Festpreis auf ebay.de/.at/.ch/.co.uk. Die Gesamtzahl der Angebote geht in den Wettbewerb ein (Gewicht 0,25). Der Median-Preis der Angebote mit Versand außerhalb Asiens dient als Referenzpreis für alle Keywords ohne Google-Shopping-Preis. Der Anteil mit Versand aus China/Hongkong steht in der Detailansicht. Die [API-Lizenzbedingungen](https://developer.ebay.com/join/api-license-agreement) von eBay vor dem Echtbetrieb lesen.
 7. **Pinterest Trends (kostenlos):**
    1. Auf [developers.pinterest.com](https://developers.pinterest.com) mit einem Pinterest-Unternehmenskonto eine App anlegen und Zugriff beantragen. Pinterest prüft die App.
-   2. Im App-Bereich einen Token mit dem Scope `user_accounts:read` erzeugen. Dabei entstehen Access- und Refresh-Token.
-   3. `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET` und `PINTEREST_REFRESH_TOKEN` setzen. Der Radar holt sich vor jedem Lauf ein frisches Access-Token. Den neuen Refresh-Token, den Pinterest dabei ausgibt (60 Tage gültig), speichert er in der Datenbank (Tabelle `ApiToken`). Solange mindestens alle 60 Tage ein Lauf stattfindet, bleibt der Zugang also dauerhaft gültig. 10 Tage vor Ablauf warnt das Dashboard.
-   4. Abgefragt werden je Region die am stärksten wachsenden Suchbegriffe („growing“) aus den Interessen in `pinterest.interests`. AT und CH führt Pinterest nur gemeinsam als „DE+AT+CH“. Claude wählt die Produktbegriffe aus, wie bei den TikTok-Hashtags.
-   5. `npm run check` erneuert den Token dabei ebenfalls. Deshalb auf Railway prüfen (Pre-Deploy-Log) und nicht lokal mit denselben Zugangsdaten, sonst landet der neue Refresh-Token in der falschen Datenbank.
+   2. In der App als Redirect-URI `https://<eure-railway-domain>/api/pinterest/callback` eintragen. Die genaue Adresse steht im Dashboard unter „Quellen“.
+   3. `PINTEREST_APP_ID` und `PINTEREST_APP_SECRET` in Railway eintragen (Web-Service und „collect“), deployen, dann im Dashboard unter „Quellen“ auf **„Mit Pinterest verbinden“** klicken und bei Pinterest zustimmen. Test-Tokens aus dem Entwicklerportal taugen nicht, sie laufen nach 24 Stunden ab.
+   4. Der Radar holt sich vor jedem Lauf ein frisches Access-Token. Den neuen Refresh-Token, den Pinterest dabei ausgibt (60 Tage gültig), speichert er in der Datenbank (Tabelle `ApiToken`). Solange mindestens alle 60 Tage ein Lauf stattfindet, bleibt der Zugang also dauerhaft gültig. 10 Tage vor Ablauf warnt das Dashboard.
+   5. Abgefragt werden je Region die am stärksten wachsenden Suchbegriffe („growing“) aus den Interessen in `pinterest.interests`. AT und CH führt Pinterest nur gemeinsam als „DE+AT+CH“. Claude wählt die Produktbegriffe aus, wie bei den TikTok-Hashtags.
+   6. `npm run check` erneuert den Token dabei ebenfalls. Deshalb auf Railway prüfen (Pre-Deploy-Log) und nicht lokal mit denselben Zugangsdaten, sonst landet der neue Refresh-Token in der falschen Datenbank.
 8. **EZB-Wechselkurse (automatisch):** Vor jedem Lauf lädt der Radar die Referenzkurse der Europäischen Zentralbank (USD, CNY, GBP, CHF). Ist die EZB nicht erreichbar, gelten die festen Werte aus `fx` in der Config, mit Warnung im Dashboard. Abschalten: `fxUpdate.source = "config"`. Welche Kurse ein Kandidat nutzt, steht unten in der Detailansicht.
 9. **Abdeckung der Werbedaten:** Beide Bibliotheken zeigen nicht-politische Anzeigen nur für die **EU**. Werbedaten gibt es daher für **DE und AT**. Für CH und GB wird der Werbedruck neutral gewertet und im Dashboard als „–“ angezeigt.
 10. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
@@ -214,6 +215,7 @@ Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch
 - `/`: Rangliste des letzten erfolgreichen Laufs mit Filtern für Land und Kategorie sowie wählbarer Sortierung. Die Filter stehen in der URL und lassen sich teilen. Der Score-Balken jeder Zeile ist in Trend, Marge und Wettbewerb zerlegt (Tooltip mit Punkten).
 - `/produkt/[id]`: Detailansicht mit einer Kurzfassung in Klartext, der Aufschlüsselung aller Teil-Scores samt Zwischenwerten, der 52-Wochen-Trendkurve (Vergleichsfenster markiert), der Kalkulation (Landed Cost und Marge), dem Score-Verlauf über alle Läufe und den Zeitstempeln der Rohdaten.
 - In der Detailansicht außerdem: Werbeaktivität (Werbetreibende, aktive Anzeigen, neue Anzeigen je Woche, Links zu Beispiel-Anzeigen) und das Formular **Drop-Ergebnis** (Datum, Stück, Retourenquote, Urteil Top/Okay/Flop).
+- `/quellen`: Status jeder Quelle im letzten Lauf (Live, Demo, aus), die zugehörigen Railway-Variablen und der Button „Mit Pinterest verbinden“.
 - `/kalibrierung`: vergleicht die Scores zum Zeitpunkt der Drop-Entscheidung zwischen Top- und Flop-Drops, je Signal mit Bewertung („trennt gut“ … „umgekehrt“) und Empfehlung. Ab 3 Top- und 3 Flop-Drops (Config `calibration.minPerGroup`). Es wird **nichts automatisch** geändert; Gewichte passt ihr bewusst in der Config an.
 - Einfacher Passwortschutz über `DASHBOARD_PASSWORD`, sonst keine Nutzerverwaltung.
 

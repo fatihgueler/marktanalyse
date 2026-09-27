@@ -129,7 +129,9 @@ async function checkPinterest(env: CollectEnv): Promise<Outcome> {
     appSecret: env.PINTEREST_APP_SECRET,
     refreshToken: env.PINTEREST_REFRESH_TOKEN,
   };
-  if (!credentials.accessToken && !credentials.refreshToken) return { status: "aus", detail: "PINTEREST_ACCESS_TOKEN bzw. PINTEREST_REFRESH_TOKEN fehlen → keine Pinterest-Trends" };
+  if (!credentials.accessToken && !(credentials.appId && credentials.appSecret)) {
+    return { status: "aus", detail: "PINTEREST_APP_ID/SECRET fehlen → keine Pinterest-Trends" };
+  }
   const auth = new PinterestAuth(credentials, createDbTokenStore());
   const trends = await new PinterestTrendsSource(auth, createHashtagClassifier(env)).loadTrends(radarConfig.countries.DE.pinterestRegion);
   const first = trends[0];

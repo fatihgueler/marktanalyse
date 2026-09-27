@@ -154,3 +154,8 @@ export async function getCalibrationData() {
     return { ...o, row };
   });
 }
+
+/** Gespeicherter Pinterest-Zugang aus „Mit Pinterest verbinden“ bzw. der letzten Erneuerung. */
+export async function getPinterestConnection() {
+  return getDb().apiToken.findUnique({ where: { provider: "pinterest" }, select: { expiresAt: true, updatedAt: true } });
+}

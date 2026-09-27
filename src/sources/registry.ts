@@ -54,7 +54,8 @@ export interface SourceSet {
 export function createSources(env: CollectEnv, now: Date = new Date(), tokenStore: TokenStore | null = null): SourceSet {
   const serpApiBudget = env.SERPAPI_API_KEY ? new SearchBudget("SerpApi", perRunBudget().serpApiSearches) : null;
   const hashtagClassifier = createHashtagClassifier(env);
-  const pinterestLive = Boolean(env.PINTEREST_ACCESS_TOKEN || (env.PINTEREST_APP_ID && env.PINTEREST_APP_SECRET && env.PINTEREST_REFRESH_TOKEN));
+  // Mit App-ID und -Secret gilt Pinterest als live; den Refresh-Token liefert „Mit Pinterest verbinden“ (Datenbank).
+  const pinterestLive = Boolean(env.PINTEREST_ACCESS_TOKEN || (env.PINTEREST_APP_ID && env.PINTEREST_APP_SECRET));
   const pinterestAuth = pinterestLive
     ? new PinterestAuth(
         {

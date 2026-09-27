@@ -59,7 +59,11 @@ describe("PinterestAuth", () => {
   });
 
   it("meldet fehlende Zugangsdaten verständlich", async () => {
-    await expect(new PinterestAuth({}, null).accessToken()).rejects.toThrow(/PINTEREST_ACCESS_TOKEN/);
+    await expect(new PinterestAuth({}, null).accessToken()).rejects.toThrow(/PINTEREST_APP_ID/);
+  });
+
+  it("verweist auf den Button, solange Pinterest noch nicht verbunden ist", async () => {
+    await expect(new PinterestAuth({ appId: "1", appSecret: "s" }, memoryStore(null)).accessToken()).rejects.toThrow(/Mit Pinterest verbinden/);
   });
 
   it("kann erneuern, sobald App-Daten und ein Refresh-Token (Umgebung oder Speicher) da sind", () => {
