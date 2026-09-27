@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mixedModeWarnings } from "./readiness";
+import { mixedModeWarnings, unusableLiveRunReason } from "./readiness";
 import type { RunSourceMode } from "./types";
 
 const ALL_MOCK: Record<string, RunSourceMode> = {
@@ -52,5 +52,23 @@ describe("mixedModeWarnings", () => {
   it("warnt, wenn eBay fehlt, obwohl Google-Shopping-Preise da sind", () => {
     const modes = { ...ALL_MOCK, "google-trends": "live", "google-shopping": "live", aliexpress: "live", claude: "live" } as const;
     expect(mixedModeWarnings(modes)).toEqual([expect.stringMatching(/EBAY_CLIENT_ID/)]);
+  });
+});
+
+describe("unusableLiveRunReason", () => {
+  it("lässt Demo-Läufe und vollständige Echtläufe durch", () => {
+    expect(unusableLiveRunReason(ALL_MOCK)).toBeNull();
+    expect(unusableLiveRunReason({ ...ALL_MOCK, "google-trends": "live", aliexpress: "live" })).toBeNull();
+    expect(unusableLiveRunReason({ ...ALL_MOCK, "google-trends": "live", "alibaba-1688": "live", claude: "live" })).toBeNull();
+  });
+
+  it("stoppt Trends + 1688 ohne Claude, weil 1688 ohne Übersetzung nichts findet", () => {
+    const modes = { ...ALL_MOCK, "google-trends": "live", "tiktok-trends": "live", "google-shopping": "live", "alibaba-1688": "live", aliexpress: "off" } as const;
+    expect(unusableLiveRunReason(modes)).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  it("stoppt Trends ohne jede Angebotsquelle und Angebote ohne Trends", () => {
+    expect(unusableLiveRunReason({ ...ALL_MOCK, "google-trends": "live" })).toMatch(/AliExpress/);
+    expect(unusableLiveRunReason({ ...ALL_MOCK, aliexpress: "live" })).toMatch(/Trendquelle/);
   });
 });

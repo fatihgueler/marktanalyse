@@ -98,6 +98,7 @@ Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei 
 | – | EZB-Wechselkurse | kostenlos | keiner, läuft automatisch | – |
 
 - **Minimum für verwertbare Ergebnisse: 1 + 2 + 3 + 7.** Werbedaten (5, 6), Scraping (4) und Pinterest (8) verbessern den Score, sind aber optional.
+- **Kein Lauf ohne Aussicht auf Kandidaten:** Sind Trends live, aber keine brauchbare Angebotsquelle (AliExpress, oder 1688 zusammen mit Claude), bricht `collect -- --live` vor der ersten bezahlten Suche ab (Exit-Code 3) und nennt den fehlenden Schlüssel.
 - **Echtbetrieb ohne Demo-Daten:** Sobald eine Trend- oder Angebotsquelle live ist, laufen die übrigen Demo-Quellen nicht mehr mit (im Dashboard „aus“). Ihre Signale zählen dann neutral, statt erfundene Werte in die Rangliste zu mischen. Was dadurch fehlt, steht als Hinweis unter dem Lauf-Status.
 - **Gratis-Variante zum Ausprobieren:** Pinterest statt SerpApi als Trendquelle (8 + 2 + 3 + 7) kostet nur den Claude-Verbrauch. Sie deckt aber nur, was auf Pinterest gesucht wird, und die Kurven sind weniger fein als bei Google Trends.
 - Anträge mit Vorlauf (3, 5, 6, 7, 8) **zuerst** stellen.

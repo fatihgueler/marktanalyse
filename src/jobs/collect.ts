@@ -24,7 +24,7 @@ import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { createDbTokenStore } from "@/lib/token-store";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
 import { loadFxRates, withFx, type FxInfo } from "@/sources/fx/ecb";
-import { mixedModeWarnings } from "@/sources/readiness";
+import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
 import type { AdRecord, DemandRecord, MarketRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
@@ -551,6 +551,11 @@ async function main(): Promise<number> {
     if (ifEmpty) {
       console.log("\n--if-empty: Mindestens eine Quelle ist live – kein automatischer Lauf beim Deploy (Kostenschutz).");
       return 0;
+    }
+    const unusable = unusableLiveRunReason(modes);
+    if (unusable) {
+      console.error(`\nLauf übersprungen, damit keine bezahlten Suchen verfallen: ${unusable}`);
+      return 3;
     }
     console.log("\nKostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):");
     for (const line of liveCosts) console.log(`  • ${line}`);

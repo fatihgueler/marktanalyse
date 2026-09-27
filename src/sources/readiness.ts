@@ -30,3 +30,23 @@ export function mixedModeWarnings(modes: Record<string, RunSourceMode>): string[
   }
   return warnings;
 }
+
+/**
+ * Grund, warum ein Echtbetrieb-Lauf keine Kandidaten liefern kann – dann wird er gar nicht erst
+ * gestartet, damit keine bezahlten Suchen verfallen. null = Lauf ist sinnvoll.
+ * 1688 zählt nur mit Claude, weil die Suche eine chinesische Übersetzung braucht.
+ */
+export function unusableLiveRunReason(modes: Record<string, RunSourceMode>): string | null {
+  const live = (id: string) => modes[id] === "live";
+  const anyTrendLive = TREND_SOURCES.some(live);
+  const anySupplyLive = SUPPLY_SOURCES.some(live);
+  if (!anyTrendLive && !anySupplyLive) return null;
+  if (!anyTrendLive) return "Keine Trendquelle ist live (SERPAPI_API_KEY, Pinterest oder APIFY_TOKEN fehlen).";
+  const usableSupply = live("aliexpress") || (live("alibaba-1688") && live("claude"));
+  if (!usableSupply) {
+    return live("alibaba-1688")
+      ? "Einzige Angebotsquelle ist 1688, und die braucht ANTHROPIC_API_KEY für die Übersetzung. AliExpress-Keys oder ANTHROPIC_API_KEY setzen."
+      : "Keine Angebotsquelle ist live. AliExpress-Keys setzen.";
+  }
+  return null;
+}
