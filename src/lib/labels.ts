@@ -10,6 +10,9 @@ export const SOURCE_LABELS: Record<string, string> = {
   "tiktok-trends": "TikTok Creative Center",
   "alibaba-1688": "1688",
   betrieb: "Betrieb",
+  "pinterest-trends": "Pinterest Trends",
+  ebay: "eBay",
+  "ezb-kurse": "EZB-Kurse",
 };
 
 export function sourceLabel(id: string): string {
@@ -26,6 +29,9 @@ export function judgeLabel(judge: string): string {
 export function demandMetric(source: string): { label: string; note: string } {
   if (source === "tiktok-trends") {
     return { label: "TikTok-Popularität", note: "TikTok Creative Center (Scraping), Hashtag-Popularität, 100 = Höchstwert im Zeitraum" };
+  }
+  if (source === "pinterest-trends") {
+    return { label: "Pinterest-Suchinteresse", note: "Pinterest Trends, relatives Suchvolumen (100 = Höchstwert im Zeitraum)" };
   }
   return { label: "Suchinteresse", note: "Google Trends, relativ (100 = Höchstwert im Zeitraum)" };
 }

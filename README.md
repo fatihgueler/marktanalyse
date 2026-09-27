@@ -9,6 +9,8 @@ Google Trends (DE/AT/CH/GB) ──► AliExpress ──► Google Shopping ─�
 
 **Phase 2** ergänzt Werbedaten aus der **Meta Ad Library** und der **TikTok Ad Library** (wie viele Shops ein Produkt im Zielland schon bewerben) sowie ein **Drop-Feedback** mit Kalibrierungsseite, die zeigt, welche Signale eure echten Erfolge vorhergesagt haben.
 
+**Kostenlose Zusatzquellen:** **Pinterest Trends** als weitere Trendquelle, **eBay** für Angebotszahl und Preise im Zielland und die **EZB-Tageskurse** für alle Umrechnungen.
+
 **Ohne einen einzigen API-Key vollständig lauffähig:** Fehlt ein Key, läuft die jeweilige Quelle automatisch mit realistischen Demo-Daten. Das Dashboard kennzeichnet Demo-Daten deutlich.
 
 ## Stack
@@ -73,6 +75,9 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `META_APP_ID`, `META_APP_SECRET` | nein | Nur für die Warnung, bevor der Meta-Token abläuft |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
 | `APIFY_TOKEN` | nein | Scraping-Dienst [Apify](https://apify.com) für TikTok Creative Center und 1688. Leer → Demo-Modus. **Siehe Abschnitt „Scraping“.** |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | nein | [eBay Browse API](https://developer.ebay.com), kostenlos: Angebotszahl und Preise im Zielland. Leer → Demo-Modus. |
+| `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_REFRESH_TOKEN` | nein | [Pinterest Trends API](https://developers.pinterest.com), kostenlos. Der Radar erneuert den Zugang selbst. |
+| `PINTEREST_ACCESS_TOKEN` | nein | Alternative zu den drei Pinterest-Werten, läuft aber nach 30 Tagen ab. |
 
 Secrets stehen ausschließlich in `.env` (per `.gitignore` ausgeschlossen) bzw. in den Railway-Variablen.
 
@@ -88,9 +93,14 @@ Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei 
 | 4 | [Apify](https://apify.com), Gratis-Plan | 0 $ (5 $ Guthaben/Monat) | sofort | `APIFY_TOKEN` |
 | 5 | Meta Ad Library (Identitätsprüfung + App) | kostenlos | 1–3 Tage (Ausweisprüfung) | `META_ACCESS_TOKEN`, `META_APP_ID`, `META_APP_SECRET` |
 | 6 | TikTok Commercial Content API | kostenlos | Wochen, Zulassung unsicher | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
+| 7 | [eBay Developers Program](https://developer.ebay.com), Production-Keyset | kostenlos | 1 Tag (Konto-Freischaltung) | `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` |
+| 8 | [Pinterest Developers](https://developers.pinterest.com), App mit Trends-Zugriff | kostenlos | einige Tage (App-Prüfung) | `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_REFRESH_TOKEN` |
+| – | EZB-Wechselkurse | kostenlos | keiner, läuft automatisch | – |
 
-- **Minimum für verwertbare Ergebnisse: 1 + 2 + 3.** Werbedaten (5, 6) und Scraping (4) verbessern den Score, sind aber optional. Wer nur einen Teil live schaltet (z. B. echte Trends, aber Demo-Angebote), bekommt eine Warnung im Lauf und im Dashboard, weil echte und Demo-Daten dann gemischt würden.
-- Anträge mit Vorlauf (3, 5, 6) **zuerst** stellen.
+- **Minimum für verwertbare Ergebnisse: 1 + 2 + 3 + 7.** Werbedaten (5, 6), Scraping (4) und Pinterest (8) verbessern den Score, sind aber optional.
+- **Echtbetrieb ohne Demo-Daten:** Sobald eine Trend- oder Angebotsquelle live ist, laufen die übrigen Demo-Quellen nicht mehr mit (im Dashboard „aus“). Ihre Signale zählen dann neutral, statt erfundene Werte in die Rangliste zu mischen. Was dadurch fehlt, steht als Hinweis unter dem Lauf-Status.
+- **Gratis-Variante zum Ausprobieren:** Pinterest statt SerpApi als Trendquelle (8 + 2 + 3 + 7) kostet nur den Claude-Verbrauch. Sie deckt aber nur, was auf Pinterest gesucht wird, und die Kurven sind weniger fein als bei Google Trends.
+- Anträge mit Vorlauf (3, 5, 6, 7, 8) **zuerst** stellen.
 - Nach jedem neuen Key: `npm run check`. Vor dem ersten echten Lauf einmal `npm run check -- --probe`.
 - Dann `npm run collect -- --live`. Auf Railway beides über den Service „collect“, siehe [Deployment](#deployment-auf-railway).
 
@@ -107,8 +117,16 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
    3. Im [Graph API Explorer](https://developers.facebook.com/tools/explorer/) einen User-Token für die App erzeugen und ihn in einen **langlebigen Token (60 Tage)** tauschen, etwa über den [Access Token Debugger](https://developers.facebook.com/tools/debug/accesstoken/) („Extend Access Token“).
    4. `META_ACCESS_TOKEN` setzen. Optional `META_APP_ID` und `META_APP_SECRET`, dann warnt `collect` 10 Tage vor Ablauf. Einen abgelaufenen Token meldet der Lauf als Fehler bei „meta-ad-library“.
 5. **TikTok Ad Library:** Auf [developers.tiktok.com](https://developers.tiktok.com/products/commercial-content-api) die **Commercial Content API** beantragen. TikTok prüft jeden Antrag, und ob kommerzielle Antragsteller zugelassen werden, ist nicht garantiert. Nach der Zulassung `TIKTOK_CLIENT_KEY` und `TIKTOK_CLIENT_SECRET` setzen.
-6. **Abdeckung der Werbedaten:** Beide Bibliotheken zeigen nicht-politische Anzeigen nur für die **EU**. Werbedaten gibt es daher für **DE und AT**. Für CH und GB wird der Werbedruck neutral gewertet und im Dashboard als „–“ angezeigt.
-7. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
+6. **eBay (kostenlos, 5.000 Abfragen am Tag):** Auf [developer.ebay.com](https://developer.ebay.com) registrieren, unter „Application Keys“ ein **Production**-Keyset erzeugen, App ID als `EBAY_CLIENT_ID` und Cert ID als `EBAY_CLIENT_SECRET` eintragen. Je Keyword und Land sucht der Radar Neuware zum Festpreis auf ebay.de/.at/.ch/.co.uk. Die Gesamtzahl der Angebote geht in den Wettbewerb ein (Gewicht 0,25). Der Median-Preis der Angebote mit Versand außerhalb Asiens dient als Referenzpreis für alle Keywords ohne Google-Shopping-Preis. Der Anteil mit Versand aus China/Hongkong steht in der Detailansicht. Die [API-Lizenzbedingungen](https://developer.ebay.com/join/api-license-agreement) von eBay vor dem Echtbetrieb lesen.
+7. **Pinterest Trends (kostenlos):**
+   1. Auf [developers.pinterest.com](https://developers.pinterest.com) mit einem Pinterest-Unternehmenskonto eine App anlegen und Zugriff beantragen. Pinterest prüft die App.
+   2. Im App-Bereich einen Token mit dem Scope `user_accounts:read` erzeugen. Dabei entstehen Access- und Refresh-Token.
+   3. `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET` und `PINTEREST_REFRESH_TOKEN` setzen. Der Radar holt sich vor jedem Lauf ein frisches Access-Token. Den neuen Refresh-Token, den Pinterest dabei ausgibt (60 Tage gültig), speichert er in der Datenbank (Tabelle `ApiToken`). Solange mindestens alle 60 Tage ein Lauf stattfindet, bleibt der Zugang also dauerhaft gültig. 10 Tage vor Ablauf warnt das Dashboard.
+   4. Abgefragt werden je Region die am stärksten wachsenden Suchbegriffe („growing“) aus den Interessen in `pinterest.interests`. AT und CH führt Pinterest nur gemeinsam als „DE+AT+CH“. Claude wählt die Produktbegriffe aus, wie bei den TikTok-Hashtags.
+   5. `npm run check` erneuert den Token dabei ebenfalls. Deshalb auf Railway prüfen (Pre-Deploy-Log) und nicht lokal mit denselben Zugangsdaten, sonst landet der neue Refresh-Token in der falschen Datenbank.
+8. **EZB-Wechselkurse (automatisch):** Vor jedem Lauf lädt der Radar die Referenzkurse der Europäischen Zentralbank (USD, CNY, GBP, CHF). Ist die EZB nicht erreichbar, gelten die festen Werte aus `fx` in der Config, mit Warnung im Dashboard. Abschalten: `fxUpdate.source = "config"`. Welche Kurse ein Kandidat nutzt, steht unten in der Detailansicht.
+9. **Abdeckung der Werbedaten:** Beide Bibliotheken zeigen nicht-politische Anzeigen nur für die **EU**. Werbedaten gibt es daher für **DE und AT**. Für CH und GB wird der Werbedruck neutral gewertet und im Dashboard als „–“ angezeigt.
+10. **Kostenschutz:** Sobald mindestens eine Quelle live wäre, bricht `npm run collect` ab und zeigt die Obergrenze der kostenpflichtigen Aufrufe:
 
    ```
    Kostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):
@@ -118,7 +136,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
    ```
 
    Erst `npm run collect -- --live` ruft die APIs tatsächlich auf. Die Mengen steuern `demand.maxSeedsPerCountry` und `demand.maxKeywordsPerCountry` in der Config.
-8. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
+11. **Claude-Kosten:** Pro Keyword und Land gibt es genau einen Request für alle Treffer. Bewertungen werden in `MatchJudgment` gecacht, das gleiche Paar aus Keyword und Produkt wird also nie zweimal bezahlt. Schlägt Claude fehl (Rate-Limit, Ablehnung), springt für dieses Keyword die Heuristik ein. Der Fehler steht dann im Lauf-Status.
 
 Hinweis zur Live-Anbindung: Die Adapter sind nach der jeweiligen API-Dokumentation gebaut, wurden aber mangels Keys **nicht gegen die echten APIs getestet** (nur die Fehlerfälle mit ungültigen Keys). Deshalb vor dem ersten Lauf `npm run check -- --probe`: Es ruft jede Quelle einmal über denselben Code wie der Lauf auf und zeigt, ob die Antworten passen. Fehler und Warnungen eines Laufs stehen im Dashboard unter dem Lauf-Status.
 
@@ -158,7 +176,7 @@ Die Config ist auf die günstigste Variante eingestellt, die rund 500 Kandidaten
 | Claude | `claude-haiku-4-5`, nach Verbrauch | ca. 3 $ |
 | Apify (TikTok Creative Center, 1688) | Gratis-Plan, 5 $ Guthaben | 0 $ |
 | Railway (Dashboard, Datenbank, Cron) | Hobby | ca. 5–10 $ |
-| AliExpress, Meta Ad Library, TikTok Ad Library | kostenlos | 0 $ |
+| AliExpress, eBay, Pinterest, EZB-Kurse, Meta Ad Library, TikTok Ad Library | kostenlos | 0 $ |
 | **Summe** | | **ca. 33–38 $** |
 
 So wird das Budget eingehalten:
@@ -186,8 +204,8 @@ Wichtige Stellschrauben:
 Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch Tests abgedeckt.
 
 - **Trend-Dynamik T (0–1):** vergleicht die letzten 4 Wochen mit den 4 Wochen davor. Das Wachstum geht sättigend ein (Verdopplung ≈ 0,5). Wenig Vorgeschichte im restlichen Jahr ergibt einen **Frühphasen-Bonus**, aber nur bei steigendem Interesse. Das absolute Niveau zählt bewusst wenig. Lückenhafte Reihen mit Nullwerten in den letzten Wochen gelten als Rauschen (T = 0). Jedes Keyword wird nur mit sich selbst verglichen, weil Google-Trends-Werte je Abfrage normiert sind.
-- **Marge M (0–1):** Landed Cost = Einkauf + Versand + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land. Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
-- **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus drei Signalen: Trefferzahl auf AliExpress (Gewicht 0,25), Bestellvolumen der Top-Treffer (0,25) und **Werbedruck** = Zahl der Shops, die das Keyword im Zielland auf Meta/TikTok bewerben (0,50). Ohne Werbedaten (CH, GB) zählt der Werbedruck neutral.
+- **Marge M (0–1):** Landed Cost = Einkauf + Versand + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land, umgerechnet mit den EZB-Tageskursen. Verkaufspreis: Google Shopping, sonst eBay, sonst Kategorie-Faktor. Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
+- **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus vier Signalen: Trefferzahl auf AliExpress (Gewicht 0,15), Bestellvolumen der Top-Treffer (0,20), **Angebote auf eBay im Zielland** (0,25) und **Werbedruck** = Zahl der Shops, die das Keyword im Zielland auf Meta/TikTok bewerben (0,40). Fehlende Signale (z. B. keine Werbedaten für CH und GB) zählen neutral.
 - **Marktdynamik der Werbung** (neue Anzeigen der letzten 4 Wochen gegenüber den 4 davor) wird **nur angezeigt, nicht gewichtet**. Ob steigende Werbung Nachfrage oder Konkurrenz anzeigt, zeigt erst die Kalibrierung.
 - **Gesamtscore:** `100 × Relevanz × (0,50·T + 0,35·M + 0,15·W)`. Kandidaten unter dem Mindest-Rohertrag werden gespeichert, aber markiert und ans Ende sortiert.
 
@@ -216,20 +234,21 @@ Bewusst ohne `railway.json`: Eine Konfigurationsdatei im Repo würde die Dashboa
 ```
 src/
 ├── config/        radar.config.ts (alle Annahmen), Validierung + Config-Version
-├── sources/       Adapter-Interfaces, Registry, Google Trends, AliExpress, Google Shopping,
-│                  Werbebibliotheken (ads/: Meta, TikTok), Scraping (scraping/: Apify,
-│                  TikTok Creative Center, 1688), Mock-Katalog
+├── sources/       Adapter-Interfaces, Registry, Google Trends, Pinterest Trends, AliExpress,
+│                  Google Shopping, eBay (market/), EZB-Kurse (fx/), Werbebibliotheken
+│                  (ads/: Meta, TikTok), Scraping (scraping/: Apify, TikTok Creative Center,
+│                  1688), Mock-Katalog
 ├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik,
 │                  Hashtag-Klassifizierung, Übersetzung für 1688
 ├── scoring/       trend, margin, competition, ads, score, calibration (+ Tests)
-├── jobs/          collect.ts
+├── jobs/          collect.ts (Datenlauf), check.ts (Verbindungstest)
 ├── lib/           db, env, auth, Formatierung, Queries
 ├── components/    Dashboard-Komponenten (+ shadcn/ui unter ui/)
 └── app/           Seiten: / (Rangliste), /produkt/[id], /kalibrierung, /login
 prisma/            schema.prisma, Migrationen
 ```
 
-Eine neue Quelle implementiert `TrendSource`, `SupplySource`, `PriceSource` oder `AdSignalSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen.
+Eine neue Quelle implementiert `TrendSource`, `SupplySource`, `PriceSource`, `MarketSource` oder `AdSignalSource` aus `src/sources/types.ts` und wird in `src/sources/registry.ts` eingetragen.
 
 **Offen:** Bildähnlichkeit, um dasselbe Produkt auf 1688 und AliExpress zu verknüpfen (Beschaffungswege nebeneinander), und TikTok-Top-Ads als Werbedaten auch für GB. Beides ist in `PLAN-PHASE2.md` beschrieben.
 
@@ -237,4 +256,5 @@ Eine neue Quelle implementiert `TrendSource`, `SupplySource`, `PriceSource` oder
 
 - `npm audit` meldet Schwachstellen im **PostCSS, das Next.js 15 mitbringt** (nur zur Build-Zeit genutzt). Behoben ist das erst in Next 16; der Stack ist auf Next 15 festgelegt.
 - Bewusst **keine `loading.tsx` auf Root-Ebene**: Damit blieben in Next 15.5 (Production) Filter-Navigationen hängen, die auf derselben Seite nur URL-Parameter ändern. Ein Skeleton gibt es nur für die Detailseite; beim Filtern zeigt die Filterleiste „Aktualisiere …“.
-- Wechselkurse sind feste Config-Werte und müssen von Hand gepflegt werden.
+- Die festen Wechselkurse in der Config sind nur noch Rückfallwerte, falls die EZB nicht erreichbar ist.
+- Die Adapter für eBay und Pinterest sind nach der offiziellen Doku bzw. OpenAPI-Beschreibung gebaut und nur mit ungültigen Keys gegen die echten Endpunkte getestet (Anmeldung und Pfade stimmen). Beim ersten echten Key zeigt `npm run check`, ob die Antworten passen.

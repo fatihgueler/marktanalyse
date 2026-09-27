@@ -8,7 +8,7 @@
  */
 import { config as loadDotenv } from "dotenv";
 import { configVersion, perRunBudget, validateConfig, worstCaseSerpApiSearches } from "@/config/config-check";
-import { COUNTRIES, radarConfig, type Country } from "@/config/radar.config";
+import { COUNTRIES, radarConfig, type Country, type RadarConfig } from "@/config/radar.config";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { getDb } from "@/lib/db";
@@ -21,10 +21,12 @@ import { scoreCompetition } from "@/scoring/competition";
 import { calculateMargin, calculateWholesaleMargin, fallbackReferencePrice } from "@/scoring/margin";
 import { totalScore, type CandidateBreakdown } from "@/scoring/score";
 import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
+import { createDbTokenStore } from "@/lib/token-store";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
+import { loadFxRates, withFx, type FxInfo } from "@/sources/fx/ecb";
 import { mixedModeWarnings } from "@/sources/readiness";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
-import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
+import type { AdRecord, DemandRecord, MarketRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
 loadDotenv({ quiet: true });
 
@@ -41,14 +43,18 @@ interface RunContext {
   db: PrismaClient;
   runId: string;
   sources: SourceSet;
+  /** Config mit den Wechselkursen dieses Laufs (EZB oder fest) – für alle Margenrechnungen */
+  config: RadarConfig;
+  fx: FxInfo;
   judge: MatchJudge;
   errors: RunError[];
   stats: { keywords: number; qualified: number; offers: number; candidates: number };
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
-/** Ab so vielen Resttagen warnt der Lauf, dass der Meta-Token erneuert werden muss */
+/** Ab so vielen Resttagen warnt der Lauf, dass der Meta- bzw. Pinterest-Token erneuert werden muss */
 const META_TOKEN_WARN_DAYS = 10;
+const PINTEREST_TOKEN_WARN_DAYS = 10;
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 // ── Kostenschutz ─────────────────────────────────────────────────────────
@@ -89,6 +95,13 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   }
   if (modes.claude === "live") {
     lines.push(`Claude (${readCollectEnv().ANTHROPIC_MODEL}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
+  }
+  if (modes.ebay === "live") {
+    lines.push(`eBay Browse API: bis zu ${countries * maxKeywordsPerCountry} Suchen (kostenlos, 5.000 je Tag)`);
+  }
+  if (modes["pinterest-trends"] === "live") {
+    const regions = new Set(COUNTRIES.map((c) => radarConfig.countries[c].pinterestRegion)).size;
+    lines.push(`Pinterest Trends: ${regions} Abfragen (kostenlos)`);
   }
   return lines;
 }
@@ -206,24 +219,43 @@ async function storeOffers(ctx: RunContext, offers: SupplyRecord[], country: Cou
   return stored;
 }
 
+async function storeReferencePrice(ctx: RunContext, record: PriceRecord, keyword: string, country: Country): Promise<void> {
+  await ctx.db.referencePrice.create({
+    data: {
+      runId: ctx.runId,
+      source: record.source,
+      country,
+      keyword,
+      medianPrice: record.medianPrice,
+      currency: record.currency,
+      sampleSize: record.sampleSize,
+      fetchedAt: record.fetchedAt,
+      raw: asJson(record.raw),
+    },
+  });
+}
+
 async function fetchReferencePrice(ctx: RunContext, keyword: string, country: Country): Promise<PriceRecord | null> {
   const source = ctx.sources.price;
+  if (!source) return null;
   try {
     const record = await source.referencePrice(keyword, country);
     if (!record) return null;
-    await ctx.db.referencePrice.create({
-      data: {
-        runId: ctx.runId,
-        source: record.source,
-        country,
-        keyword,
-        medianPrice: record.medianPrice,
-        currency: record.currency,
-        sampleSize: record.sampleSize,
-        fetchedAt: record.fetchedAt,
-        raw: asJson(record.raw),
-      },
-    });
+    await storeReferencePrice(ctx, record, keyword, country);
+    return record;
+  } catch (error) {
+    ctx.errors.push({ source: source.id, country, keyword, message: errorMessage(error) });
+    return null;
+  }
+}
+
+/** eBay im Zielland: Angebotszahl (Wettbewerb) und ggf. Median-Preis, der als Referenzpreis gespeichert wird. */
+async function fetchMarket(ctx: RunContext, keyword: string, country: Country): Promise<MarketRecord | null> {
+  const source = ctx.sources.market;
+  if (!source) return null;
+  try {
+    const record = await source.marketActivity(keyword, country);
+    if (record.price) await storeReferencePrice(ctx, record.price, keyword, country);
     return record;
   } catch (error) {
     ctx.errors.push({ source: source.id, country, keyword, message: errorMessage(error) });
@@ -287,14 +319,17 @@ async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Co
   const bySource = await searchAllSupply(ctx, keyword, country, allowed);
   if (bySource.length === 0) return;
 
-  const [reference, adRecords] = await Promise.all([
+  const [shopping, market, adRecords] = await Promise.all([
     allowed.price ? fetchReferencePrice(ctx, keyword, country) : Promise.resolve(null),
+    fetchMarket(ctx, keyword, country),
     fetchAdSignals(ctx, keyword, country),
   ]);
+  // Google Shopping (breiter Querschnitt aller Shops) vor eBay, eBay vor dem Kategorie-Faktor.
+  const reference = shopping ?? market?.price ?? null;
   const ads = combineAdSignals(adRecords);
   for (const { offers } of bySource) {
     ctx.stats.offers += offers.length;
-    await processOffers(ctx, offers, demand, country, reference, ads);
+    await processOffers(ctx, offers, demand, country, reference, market, ads);
   }
 }
 
@@ -304,6 +339,7 @@ async function processOffers(
   demand: ScoredDemand,
   country: Country,
   reference: PriceRecord | null,
+  market: MarketRecord | null,
   ads: ReturnType<typeof combineAdSignals>,
 ): Promise<void> {
   const keyword = demand.record.keyword;
@@ -323,45 +359,55 @@ async function processOffers(
 
   // Wettbewerb gilt für das Keyword je Quelle: Anbieterzahl + Bestellvolumen aller Top-Treffer + Werbedruck.
   const orders = offers.map((o) => o.orders30d).filter((o): o is number => o !== null);
-  const competition = scoreCompetition({
-    resultCount: offers[0]?.resultCount ?? null,
-    orders30dSum: orders.length > 0 ? orders.reduce((a, b) => a + b, 0) : null,
-    advertisers: ads.advertisers,
-  });
+  const competition = scoreCompetition(
+    {
+      resultCount: offers[0]?.resultCount ?? null,
+      orders30dSum: orders.length > 0 ? orders.reduce((a, b) => a + b, 0) : null,
+      advertisers: ads.advertisers,
+      marketplaceListings: market?.totalListings ?? null,
+    },
+    ctx.config.competition,
+  );
 
   for (const { offer, productId, offerId } of stored) {
     const judgment = match.judgments.get(offer.externalId);
     if (!judgment || judgment.relevance < radarConfig.matching.minRelevance) continue;
 
-    const currency = radarConfig.countries[country].currency;
+    const currency = ctx.config.countries[country].currency;
     // ANNAHME: Beim Großhandelspreis fällt die Faktor-Schätzung konservativ (niedriger) aus.
-    const referencePrice = reference?.medianPrice ?? fallbackReferencePrice(offer.price, offer.currency, country, judgment.category);
+    const referencePrice = reference?.medianPrice ?? fallbackReferencePrice(offer.price, offer.currency, country, judgment.category, ctx.config);
     const referenceCurrency = reference?.currency ?? currency;
     const referenceSource = reference ? reference.source : "config-multiplikator";
 
     const margin =
       offer.sourcingModel === "wholesale"
-        ? calculateWholesaleMargin({
-            country,
-            category: judgment.category,
-            basePrice: offer.price,
-            priceTiers: offer.priceTiers ?? [],
-            purchaseCurrency: offer.currency,
-            moq: offer.moq ?? null,
-            weightKg: offer.weightKg ?? null,
-            referencePrice,
-            referenceCurrency,
-          })
-        : calculateMargin({
-            country,
-            category: judgment.category,
-            purchasePrice: offer.price,
-            purchaseCurrency: offer.currency,
-            shippingCost: offer.shippingCost,
-            shippingCurrency: offer.currency,
-            referencePrice,
-            referenceCurrency,
-          });
+        ? calculateWholesaleMargin(
+            {
+              country,
+              category: judgment.category,
+              basePrice: offer.price,
+              priceTiers: offer.priceTiers ?? [],
+              purchaseCurrency: offer.currency,
+              moq: offer.moq ?? null,
+              weightKg: offer.weightKg ?? null,
+              referencePrice,
+              referenceCurrency,
+            },
+            ctx.config,
+          )
+        : calculateMargin(
+            {
+              country,
+              category: judgment.category,
+              purchasePrice: offer.price,
+              purchaseCurrency: offer.currency,
+              shippingCost: offer.shippingCost,
+              shippingCurrency: offer.currency,
+              referencePrice,
+              referenceCurrency,
+            },
+            ctx.config,
+          );
     const score = totalScore({ trend: demand.trend, margin, competition, relevance: judgment.relevance });
     const breakdown: CandidateBreakdown = {
       trend: demand.trend,
@@ -375,6 +421,8 @@ async function processOffers(
         originalCurrency: referenceCurrency,
       },
       ads,
+      market: market ? { source: market.source, totalListings: market.totalListings, asiaShare: market.asiaShare } : undefined,
+      fx: { source: ctx.fx.source, date: ctx.fx.date },
     };
 
     await ctx.db.candidateSnapshot.create({
@@ -421,7 +469,7 @@ interface Allowance {
 function assignAllowances(ctx: RunContext, sorted: ScoredDemand[]): Allowance[] {
   const supplyUsed = new Map<string, number>();
   let priceUsed = 0;
-  const priceLimit = ctx.sources.price.maxLookupsPerCountry ?? Infinity;
+  const priceLimit = ctx.sources.price ? (ctx.sources.price.maxLookupsPerCountry ?? Infinity) : 0;
   return sorted.map(() => {
     const supply = new Set<string>();
     for (const source of ctx.sources.supply) {
@@ -481,13 +529,13 @@ async function main(): Promise<number> {
   const liveFlag = process.argv.includes("--live");
   validateConfig();
   const env = readCollectEnv();
-  const sources = createSources(env);
+  const sources = createSources(env, new Date(), createDbTokenStore());
   const judge = createJudge(env);
   const modes = describeModes(sources, judge.mode);
 
   console.log("Trend-Radar – Lauf startet");
   for (const [source, mode] of Object.entries(modes)) {
-    console.log(`  ${source.padEnd(16)} ${mode === "live" ? "LIVE" : "Mock (kein Key)"}`);
+    console.log(`  ${source.padEnd(16)} ${mode === "live" ? "LIVE" : mode === "off" ? "aus (Echtbetrieb, kein Key)" : "Mock (kein Key)"}`);
   }
 
   // --if-empty: Start-Modus für Deployments (Railway Pre-Deploy). Füllt eine leere Datenbank einmalig
@@ -513,6 +561,10 @@ async function main(): Promise<number> {
   }
 
   const warnings: RunError[] = mixedModeWarnings(modes).map((message) => ({ level: "warnung", source: "betrieb", message }));
+  const { fx, warning: fxWarning } = await loadFxRates();
+  modes["ezb-kurse"] = fx.source === "ezb" ? "live" : "off";
+  if (fxWarning) warnings.push({ level: "warnung", source: "ezb-kurse", message: fxWarning });
+  console.log(fx.source === "ezb" ? `  Wechselkurse: EZB vom ${fx.date}` : "  Wechselkurse: feste Werte aus der Config");
   for (const warning of warnings) console.warn(`\nWarnung: ${warning.message}`);
   if (modes["meta-ad-library"] === "live" && env.META_ACCESS_TOKEN && env.META_APP_ID && env.META_APP_SECRET) {
     try {
@@ -531,6 +583,8 @@ async function main(): Promise<number> {
     db,
     runId: run.id,
     sources,
+    config: withFx(radarConfig, fx),
+    fx,
     judge,
     errors: [...warnings],
     stats: { keywords: 0, qualified: 0, offers: 0, candidates: 0 },
@@ -541,6 +595,11 @@ async function main(): Promise<number> {
     for (const country of COUNTRIES) {
       await collectCountry(ctx, country);
       console.log(`  ${country}: fertig`);
+    }
+    const pinterestExpiry = sources.pinterestAuth?.refreshExpiresAt;
+    if (pinterestExpiry && pinterestExpiry.getTime() - Date.now() < PINTEREST_TOKEN_WARN_DAYS * 86_400_000) {
+      const days = Math.max(0, Math.floor((pinterestExpiry.getTime() - Date.now()) / 86_400_000));
+      ctx.errors.push({ level: "warnung", source: "pinterest-trends", message: `Pinterest-Refresh-Token läuft in ${days} Tagen ab – bitte neu erzeugen.` });
     }
     const realErrors = ctx.errors.filter((e) => e.level !== "warnung");
     if (realErrors.length > 0) status = ctx.stats.candidates > 0 ? "PARTIAL" : "FAILED";

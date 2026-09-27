@@ -44,12 +44,16 @@ function summarize(candidate: CandidateDetail): string[] {
   const level = competition.score >= 0.5 ? "überschaubar" : "bereits hoch";
   const ads = candidate.breakdown.ads;
   const supplier = sourceLabel(candidate.product.source);
+  const market = candidate.breakdown.market;
   const offersText = competition.resultCount !== null ? `${formatNumber(competition.resultCount)} Angebote auf ${supplier}` : null;
+  const marketText = market
+    ? `${formatNumber(market.totalListings)} auf eBay im Land${market.asiaShare !== null ? ` (${formatPercent(market.asiaShare)} mit Versand aus Asien)` : ""}`
+    : null;
   if (ads?.covered) {
-    const parts = [`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür`, offersText].filter(Boolean);
+    const parts = [`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür`, marketText, offersText].filter(Boolean);
     lines.push(`${parts.join(", ")} – Wettbewerb ${level}.`);
-  } else if (offersText) {
-    lines.push(`${offersText} – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
+  } else if (offersText || marketText) {
+    lines.push(`${[marketText, offersText].filter(Boolean).join(", ")} – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
   }
   return lines;
 }
@@ -67,7 +71,7 @@ export default async function ProductDetailPage({ params }: Params) {
   const demoSources = Object.entries(candidate.sourceModes).filter(([, mode]) => mode === "mock").map(([s]) => sourceLabel(s));
   const referenceSourceLabel =
     candidate.referencePriceSource === "config-multiplikator"
-      ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping-Treffer)`
+      ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping- oder eBay-Preise)`
       : `Median aus ${breakdown.referencePrice.sampleSize ?? "?"} Angeboten (${sourceLabel(candidate.referencePriceSource)})`;
   const historyPoints = candidate.history.map((h) => ({
     // Uhrzeit mit anzeigen: Mehrere Läufe am selben Tag sollen unterscheidbar bleiben.
@@ -232,6 +236,12 @@ export default async function ProductDetailPage({ params }: Params) {
           </p>
           <p>Angebot abgerufen: {formatDateTime(candidate.supplyOffer.fetchedAt)} ({sourceLabel(candidate.product.source)}, Produkt-ID {candidate.product.externalId})</p>
           {candidate.referencePriceMeta ? <p>Referenzpreis abgerufen: {formatDateTime(candidate.referencePriceMeta.fetchedAt)}</p> : null}
+          <p>
+            Wechselkurse:{" "}
+            {breakdown.fx?.source === "ezb" && breakdown.fx.date
+              ? `EZB-Referenzkurse vom ${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${breakdown.fx.date}T00:00:00Z`))}`
+              : "feste Werte aus der Config"}
+          </p>
           <p>
             Lauf {candidate.runId} vom {formatDateTime(candidate.run.startedAt)} · Config-Version {candidate.run.configVersion}
           </p>

@@ -104,7 +104,8 @@ export async function getCandidateDetail(id: string) {
       select: { id: true, totalScore: true, trendScore: true, marginScore: true, competitionScore: true, run: { select: { startedAt: true } } },
     }),
     db.referencePrice.findFirst({
-      where: { runId: candidate.runId, country: candidate.country, keyword: candidate.keyword },
+      // Je Keyword können Google Shopping und eBay einen Preis liefern – gezeigt wird der, der genutzt wurde.
+      where: { runId: candidate.runId, country: candidate.country, keyword: candidate.keyword, source: candidate.referencePriceSource },
       select: { fetchedAt: true, source: true, sampleSize: true },
     }),
   ]);

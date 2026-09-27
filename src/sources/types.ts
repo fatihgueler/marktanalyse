@@ -9,6 +9,8 @@ import type { Country } from "@/config/radar.config";
 
 export type { Country };
 export type SourceMode = "live" | "mock";
+/** Modus je Quelle in einem Lauf; "off" = im Echtbetrieb abgeschaltete Demo-Quelle */
+export type RunSourceMode = SourceMode | "off";
 
 /** Gemeinsame Hülle jedes normalisierten Datensatzes. */
 export interface SourceRecord<TRaw = unknown> {
@@ -17,6 +19,12 @@ export interface SourceRecord<TRaw = unknown> {
   fetchedAt: Date;
   /** unveränderte API-Antwort bzw. Mock-Rohdaten – für Nachvollziehbarkeit */
   raw: TRaw;
+}
+
+/** Ablage für rotierende Refresh-Tokens (Pinterest); die Adapter kennen die Datenbank nicht direkt. */
+export interface TokenStore {
+  load(provider: string): Promise<{ refreshToken: string; expiresAt: Date | null } | null>;
+  save(provider: string, refreshToken: string, expiresAt: Date | null): Promise<void>;
 }
 
 interface SourceBase {
@@ -112,6 +120,26 @@ export interface PriceSource extends SourceBase {
   readonly maxLookupsPerCountry?: number;
   /** null, wenn zu wenige Treffer – dann greift der Multiplikator-Fallback */
   referencePrice(keyword: string, country: Country): Promise<PriceRecord | null>;
+}
+
+// ── Marktplatz im Zielland (eBay) ───────────────────────────────────────
+
+export interface MarketRecord extends SourceRecord {
+  keyword: string;
+  /** Neuware-Angebote zum Festpreis auf dem Marktplatz des Landes (Gesamtzahl laut API) */
+  totalListings: number;
+  /** Anteil der Stichprobe mit Versand aus Asien (0..1); null ohne Stichprobe */
+  asiaShare: number | null;
+  /** Median-Preis der Angebote mit Versand außerhalb Asiens; null bei zu kleiner Stichprobe */
+  price: PriceRecord | null;
+}
+
+/**
+ * Marktplätze im Zielland liefern zwei Dinge auf einmal: wie verbreitet ein Produkt dort schon ist
+ * (Wettbewerb) und was Kunden dafür zahlen (zweiter Referenzpreis neben Google Shopping).
+ */
+export interface MarketSource extends SourceBase {
+  marketActivity(keyword: string, country: Country): Promise<MarketRecord>;
 }
 
 // ── Werbeaktivität (Phase 2) ─────────────────────────────────────────────

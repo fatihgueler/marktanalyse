@@ -11,6 +11,8 @@ export interface CompetitionInput {
   orders30dSum: number | null;
   /** Werbetreibende laut Werbebibliotheken; null = Land nicht abgedeckt (CH, GB) */
   advertisers: number | null;
+  /** Neuware-Angebote auf dem eBay-Marktplatz des Ziellandes; null = keine Daten */
+  marketplaceListings: number | null;
 }
 
 export interface CompetitionBreakdown extends CompetitionInput {
@@ -18,6 +20,8 @@ export interface CompetitionBreakdown extends CompetitionInput {
   ordersSaturation: number;
   /** Werbedruck 0..1 */
   advertisersSaturation: number;
+  /** Angebotsdichte im Zielland 0..1 */
+  marketplaceSaturation: number;
   saturation: number;
   weights: RadarConfig["competition"]["weights"];
   /** 0..1, 1 = wenig Wettbewerb */
@@ -30,8 +34,8 @@ function logSaturation(value: number | null, logCap: number): number {
 }
 
 /**
- * Wettbewerb aus drei Signalen: Anbieterzahl und Bestellvolumen auf AliExpress (breite Verfügbarkeit)
- * sowie Werbedruck – wie viele Shops das Produkt im Zielland bereits bewerben.
+ * Wettbewerb aus vier Signalen: Anbieterzahl und Bestellvolumen auf AliExpress (breite Verfügbarkeit),
+ * Angebote auf eBay im Zielland und Werbedruck – wie viele Shops das Produkt dort bereits bewerben.
  */
 export function scoreCompetition(
   input: CompetitionInput,
@@ -40,11 +44,15 @@ export function scoreCompetition(
   const resultsSaturation = logSaturation(input.resultCount, config.resultCountLogCap);
   const ordersSaturation = logSaturation(input.orders30dSum, config.ordersLogCap);
   const advertisersSaturation = logSaturation(input.advertisers, config.advertisersLogCap);
+  const marketplaceSaturation = logSaturation(input.marketplaceListings, config.marketplaceLogCap);
   const { weights } = config;
   const saturation = clamp(
-    weights.results * resultsSaturation + weights.orders * ordersSaturation + weights.advertisers * advertisersSaturation,
+    weights.results * resultsSaturation +
+      weights.orders * ordersSaturation +
+      weights.marketplace * marketplaceSaturation +
+      weights.advertisers * advertisersSaturation,
     0,
     1,
   );
-  return { ...input, resultsSaturation, ordersSaturation, advertisersSaturation, saturation, weights, score: 1 - saturation };
+  return { ...input, resultsSaturation, ordersSaturation, advertisersSaturation, marketplaceSaturation, saturation, weights, score: 1 - saturation };
 }

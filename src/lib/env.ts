@@ -20,6 +20,12 @@ const envSchema = z.object({
   TIKTOK_CLIENT_KEY: optionalSecret,
   TIKTOK_CLIENT_SECRET: optionalSecret,
   APIFY_TOKEN: optionalSecret,
+  EBAY_CLIENT_ID: optionalSecret,
+  EBAY_CLIENT_SECRET: optionalSecret,
+  PINTEREST_ACCESS_TOKEN: optionalSecret,
+  PINTEREST_APP_ID: optionalSecret,
+  PINTEREST_APP_SECRET: optionalSecret,
+  PINTEREST_REFRESH_TOKEN: optionalSecret,
 });
 
 export type CollectEnv = z.infer<typeof envSchema>;

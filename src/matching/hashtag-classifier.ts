@@ -12,9 +12,18 @@ export interface HashtagVerdict {
   keyword: string | null;
 }
 
+/** Woher die Trendbegriffe stammen – bestimmt die Beispiele im Prompt */
+export type TrendTermOrigin = "tiktok" | "pinterest";
+
+const ORIGIN_TEXT: Record<TrendTermOrigin, { noun: string; examples: string; format: (term: string) => string }> = {
+  tiktok: { noun: "TikTok-Trend-Hashtag", examples: "#cloudlamp, #minithermalprinter", format: (term) => `#${term}` },
+  pinterest: { noun: "Pinterest-Trend-Suchbegriff", examples: "„wolkenlampe“, „led spiegel bad“", format: (term) => term },
+};
+
 export interface HashtagClassifier {
   readonly mode: SourceMode;
-  classify(hashtags: string[], country: Country): Promise<HashtagVerdict[]>;
+  /** Wählt aus Trendbegriffen (Hashtags oder Suchbegriffe) die konkreten Produkte aus. */
+  classify(hashtags: string[], country: Country, origin?: TrendTermOrigin): Promise<HashtagVerdict[]>;
 }
 
 const MIN_WORD_LENGTH = 3;
@@ -73,11 +82,13 @@ export class HeuristicHashtagClassifier implements HashtagClassifier {
     this.vocabulary = buildVocabulary(config);
   }
 
-  async classify(hashtags: string[]): Promise<HashtagVerdict[]> {
+  async classify(hashtags: string[], _country?: Country, origin: TrendTermOrigin = "tiktok"): Promise<HashtagVerdict[]> {
     const { minCoverage } = this.config.scraping.tiktokHashtags;
     return hashtags.map((hashtag) => {
       const { words, coverage } = segmentHashtag(hashtag, this.vocabulary);
-      return { hashtag, keyword: coverage >= minCoverage && words.length > 0 ? words.join(" ") : null };
+      if (coverage < minCoverage || words.length === 0) return { hashtag, keyword: null };
+      // Suchbegriffe (Pinterest) sind schon lesbar geschrieben; nur Hashtags werden in Wörter zerlegt.
+      return { hashtag, keyword: origin === "pinterest" ? hashtag : words.join(" ") };
     });
   }
 }
@@ -99,14 +110,17 @@ export class ClaudeHashtagClassifier implements HashtagClassifier {
     this.client = new Anthropic({ apiKey });
   }
 
-  async classify(hashtags: string[], country: Country): Promise<HashtagVerdict[]> {
+  async classify(hashtags: string[], country: Country, origin: TrendTermOrigin = "tiktok"): Promise<HashtagVerdict[]> {
     if (hashtags.length === 0) return [];
+    const text = ORIGIN_TEXT[origin];
+    const language = radarConfig.countries[country].serpLanguage === "de" ? "Deutsch" : "Englisch";
     const response = await this.client.messages.parse({
       model: this.model,
       max_tokens: this.config.matching.maxOutputTokens,
       system:
-        "Du hilfst einem Online-Shop für Trendprodukte. Entscheide für jeden TikTok-Trend-Hashtag, ob er ein konkretes, physisches Produkt bezeichnet, das man bei einem Großhändler einkaufen kann (z. B. #cloudlamp, #minithermalprinter). Events, Personen, Marken, Challenges, Sounds und allgemeine Begriffe sind keine Produkte. Für Produkte: search_keyword = kurzer englischer Suchbegriff (2–4 Wörter, Kleinbuchstaben, ohne Marke). Sonst search_keyword = \"\".",
-      messages: [{ role: "user", content: `Land: ${country}\nHashtags:\n${hashtags.map((h) => `#${h}`).join("\n")}` }],
+        `Du hilfst einem Online-Shop für Trendprodukte. Entscheide für jeden ${text.noun}, ob er ein konkretes, physisches Produkt bezeichnet, das man bei einem Großhändler einkaufen kann (z. B. ${text.examples}). Events, Personen, Marken, Challenges, Sounds, Rezepte, Outfit-Ideen und allgemeine Begriffe sind keine Produkte. ` +
+        `Für Produkte: search_keyword = kurzer Suchbegriff auf ${language}, so wie Kunden im Land suchen (2–4 Wörter, Kleinbuchstaben, ohne Marke). Sonst search_keyword = "". Gib im Feld hashtag den Begriff unverändert zurück.`,
+      messages: [{ role: "user", content: `Land: ${country}\nBegriffe:\n${hashtags.map(text.format).join("\n")}` }],
       output_config: {
         format: zodOutputFormat(classificationSchema),
         ...effortOption(this.model, this.config),

@@ -19,7 +19,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 
 /** Drei Karten (Trend, Marge, Wettbewerb) mit Teil-Score, Gewicht, Beitrag und allen Zwischenwerten. */
 export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: CandidateBreakdown; supplierLabel: string }) {
-  const { trend, margin, competition, score } = breakdown;
+  const { trend, margin, competition, score, market } = breakdown;
   const partScore: Record<PartKey, number> = { trend: trend.score, margin: margin.score, competition: competition.score };
 
   const details: Record<PartKey, React.ReactNode> = {
@@ -51,6 +51,13 @@ export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: Candid
       <>
         <Row label={`Treffer auf ${supplierLabel}`} value={competition.resultCount === null ? "unbekannt" : formatNumber(competition.resultCount)} hint="Anbieter-Proxy" />
         <Row label="Bestellungen / 30 Tage (Top-Treffer)" value={competition.orders30dSum === null ? "unbekannt" : formatNumber(competition.orders30dSum)} />
+        {competition.marketplaceSaturation !== undefined ? (
+          <Row
+            label="Angebote auf eBay im Land"
+            value={market ? formatNumber(market.totalListings) : "keine Daten"}
+            hint={market?.asiaShare != null ? `${formatPercent(market.asiaShare)} mit Versand aus Asien` : "Neuware, Festpreis"}
+          />
+        ) : null}
         <Row
           label="Werbetreibende im Land"
           value={competition.advertisers === null || competition.advertisers === undefined ? "keine Daten" : formatNumber(competition.advertisers)}
@@ -58,6 +65,13 @@ export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: Candid
         />
         <Row label={`Sättigung Anbieter × ${formatNumber(competition.weights.results, 2)}`} value={formatNumber(competition.resultsSaturation, 2)} />
         <Row label={`Sättigung Nachfrage × ${formatNumber(competition.weights.orders, 2)}`} value={formatNumber(competition.ordersSaturation, 2)} />
+        {competition.marketplaceSaturation !== undefined ? (
+          <Row
+            label={`Sättigung eBay × ${formatNumber(competition.weights.marketplace ?? 0, 2)}`}
+            value={formatNumber(competition.marketplaceSaturation, 2)}
+            hint={market ? undefined : "neutral gewertet"}
+          />
+        ) : null}
         {competition.advertisersSaturation !== undefined ? (
           <Row
             label={`Werbedruck × ${formatNumber(competition.weights.advertisers ?? 0, 2)}`}

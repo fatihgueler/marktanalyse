@@ -37,7 +37,13 @@ export function makeTestConfig(): RadarConfig {
     minSeriesWeeks: 16,
     weights: { growth: 0.55, early: 0.35, level: 0.1 },
   };
-  config.competition = { resultCountLogCap: 5, ordersLogCap: 5, advertisersLogCap: 2, weights: { results: 0.25, orders: 0.25, advertisers: 0.5 } };
+  config.competition = {
+    resultCountLogCap: 5,
+    ordersLogCap: 5,
+    advertisersLogCap: 2,
+    marketplaceLogCap: 4,
+    weights: { results: 0.15, orders: 0.2, marketplace: 0.25, advertisers: 0.4 },
+  };
   config.score = { weights: { trend: 0.5, margin: 0.35, competition: 0.15 }, relevanceExponent: 1 };
   config.fx.CNY = 8;
   config.wholesale = {

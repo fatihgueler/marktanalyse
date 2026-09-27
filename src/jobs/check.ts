@@ -2,8 +2,11 @@
  * `npm run check` – Verbindungstest nach dem Eintragen der Keys.
  *
  * Prüft jeden gesetzten Key mit einem kostenlosen Aufruf (SerpApi Account-API, Anthropic Modell-Info,
- * Apify-Kontolimits) bzw. einer kleinen Abfrage bei den kostenlosen APIs (AliExpress, Meta, TikTok).
- * Verbraucht keine bezahlten Suchen.
+ * Apify-Kontolimits) bzw. einer kleinen Abfrage bei den kostenlosen APIs (AliExpress, eBay, Pinterest,
+ * Meta, TikTok, EZB). Verbraucht keine bezahlten Suchen.
+ *
+ * Achtung Pinterest: Die Prüfung erneuert den Refresh-Token und speichert den neuen in der Datenbank,
+ * mit der sie verbunden ist. Deshalb dort ausführen, wo auch der Lauf läuft (Railway).
  *
  * `npm run check -- --probe` fragt zusätzlich die kostenpflichtigen Quellen je einmal echt ab und prüft
  * so, ob ihre Antworten zum Code passen: 3 SerpApi-Suchen und höchstens ~0,25 $ Apify.
@@ -13,6 +16,7 @@ import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 import { radarConfig } from "@/config/radar.config";
 import { getDb } from "@/lib/db";
+import { createDbTokenStore } from "@/lib/token-store";
 import { readCollectEnv, type CollectEnv } from "@/lib/env";
 import { formatMoney } from "@/lib/format";
 import { worstCaseSerpApiSearches, perRunBudget } from "@/config/config-check";
@@ -23,6 +27,9 @@ import { metaTokenDaysLeft, MetaAdLibrarySource } from "@/sources/ads/meta-ad-li
 import { TikTokAdsSource } from "@/sources/ads/tiktok-ads";
 import { SearchBudget } from "@/sources/budget";
 import { GoogleTrendsSerpApiSource } from "@/sources/demand/google-trends.serpapi";
+import { PinterestAuth, PinterestTrendsSource } from "@/sources/demand/pinterest-trends";
+import { loadFxRates } from "@/sources/fx/ecb";
+import { EbaySource } from "@/sources/market/ebay";
 import { fetchJson } from "@/sources/http";
 import { GoogleShoppingSerpApiSource } from "@/sources/price/google-shopping.serpapi";
 import { mixedModeWarnings } from "@/sources/readiness";
@@ -104,6 +111,42 @@ async function checkAliExpress(env: CollectEnv): Promise<Outcome> {
   if (offers.length === 0) return { status: "hinweis", detail: `Anmeldung ok, aber 0 Treffer für „${PROBE_KEYWORD}“ – Tracking-ID prüfen` };
   const first = offers[0];
   return { status: "ok", detail: `${offers.length} Treffer, z. B. „${first?.title.slice(0, 50)}“ für ${formatMoney(first?.price ?? 0, first?.currency ?? "EUR")}` };
+}
+
+async function checkEbay(env: CollectEnv): Promise<Outcome> {
+  if (!env.EBAY_CLIENT_ID && !env.EBAY_CLIENT_SECRET) return { status: "aus", detail: "EBAY_CLIENT_ID/SECRET fehlen → kein Wettbewerb im Zielland, Preise meist nur geschätzt" };
+  if (!env.EBAY_CLIENT_ID || !env.EBAY_CLIENT_SECRET) return { status: "fehler", detail: "Es braucht beide: EBAY_CLIENT_ID und EBAY_CLIENT_SECRET" };
+  const record = await new EbaySource(env.EBAY_CLIENT_ID, env.EBAY_CLIENT_SECRET).marketActivity(PROBE_KEYWORD, "DE");
+  const asia = record.asiaShare === null ? "" : `, ${Math.round(record.asiaShare * 100)} % mit Versand aus Asien`;
+  const price = record.price ? `, Median ${formatMoney(record.price.medianPrice, record.price.currency)}` : "";
+  return { status: "ok", detail: `${record.totalListings.toLocaleString("de-DE")} Angebote für „${PROBE_KEYWORD}“ auf ebay.de${asia}${price}` };
+}
+
+async function checkPinterest(env: CollectEnv): Promise<Outcome> {
+  const credentials = {
+    accessToken: env.PINTEREST_ACCESS_TOKEN,
+    appId: env.PINTEREST_APP_ID,
+    appSecret: env.PINTEREST_APP_SECRET,
+    refreshToken: env.PINTEREST_REFRESH_TOKEN,
+  };
+  if (!credentials.accessToken && !credentials.refreshToken) return { status: "aus", detail: "PINTEREST_ACCESS_TOKEN bzw. PINTEREST_REFRESH_TOKEN fehlen → keine Pinterest-Trends" };
+  const auth = new PinterestAuth(credentials, createDbTokenStore());
+  const trends = await new PinterestTrendsSource(auth, createHashtagClassifier(env)).loadTrends(radarConfig.countries.DE.pinterestRegion);
+  const first = trends[0];
+  const example = first ? `, z. B. „${first.keyword}“ (${first.growthMom ?? "?"} % ggü. Vormonat)` : "";
+  const renewal = auth.canRefresh
+    ? auth.refreshExpiresAt
+      ? `Zugang erneuert sich selbst (Refresh-Token gültig bis ${auth.refreshExpiresAt.toLocaleDateString("de-DE")})`
+      : "Zugang erneuert sich selbst"
+    : "nur Access-Token – läuft nach 30 Tagen ab, App-ID/Secret/Refresh-Token empfohlen";
+  return { status: auth.canRefresh ? "ok" : "hinweis", detail: `${trends.length} steigende Begriffe in DE${example}; ${renewal}` };
+}
+
+async function checkEzb(): Promise<Outcome> {
+  const { fx, warning } = await loadFxRates();
+  if (fx.source === "config") return { status: warning ? "hinweis" : "aus", detail: warning ?? "abgeschaltet (fxUpdate.source = config) → feste Kurse" };
+  const rates = ["USD", "CNY", "GBP", "CHF"].map((c) => `${c} ${fx.rates[c]}`).join(", ");
+  return { status: warning ? "hinweis" : "ok", detail: `Kurse vom ${fx.date}: 1 EUR = ${rates}${warning ? ` – ${warning}` : ""}` };
 }
 
 async function checkMeta(env: CollectEnv): Promise<Outcome> {
@@ -202,6 +245,9 @@ async function main(): Promise<number> {
     ["SerpApi", attempt(() => checkSerpApi(env.SERPAPI_API_KEY))],
     ["Claude", attempt(() => checkAnthropic(env))],
     ["AliExpress", attempt(() => checkAliExpress(env))],
+    ["eBay", attempt(() => checkEbay(env))],
+    ["Pinterest", attempt(() => checkPinterest(env))],
+    ["EZB-Kurse", attempt(checkEzb)],
     ["Meta Ad Library", attempt(() => checkMeta(env))],
     ["TikTok Ad Library", attempt(() => checkTikTokAds(env))],
     ["Apify", attempt(() => checkApify(env.APIFY_TOKEN))],

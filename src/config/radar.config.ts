@@ -37,6 +37,10 @@ export interface CountryProfile {
   /** AliExpress-Parameter */
   aliexpressShipTo: string;
   aliexpressLanguage: string;
+  /** eBay-Marktplatz (Header X-EBAY-C-MARKETPLACE-ID) */
+  ebayMarketplace: string;
+  /** Pinterest-Trends-Region; kleinere Märkte gibt es nur zusammengefasst */
+  pinterestRegion: string;
 }
 
 export interface CountryTax {
@@ -81,18 +85,28 @@ export interface CategoryConfig {
 
 export const radarConfig = {
   countries: {
-    DE: { label: "Deutschland", currency: "EUR", serpGeo: "DE", serpLanguage: "de", aliexpressShipTo: "DE", aliexpressLanguage: "DE" },
-    AT: { label: "Österreich", currency: "EUR", serpGeo: "AT", serpLanguage: "de", aliexpressShipTo: "AT", aliexpressLanguage: "DE" },
-    CH: { label: "Schweiz", currency: "CHF", serpGeo: "CH", serpLanguage: "de", aliexpressShipTo: "CH", aliexpressLanguage: "DE" },
-    GB: { label: "Vereinigtes Königreich", currency: "GBP", serpGeo: "GB", serpLanguage: "en", aliexpressShipTo: "UK", aliexpressLanguage: "EN" },
+    // ANNAHME: Pinterest führt AT und CH nur als Region „DE+AT+CH“ – beide Länder teilen sich diese Trends.
+    DE: { label: "Deutschland", currency: "EUR", serpGeo: "DE", serpLanguage: "de", aliexpressShipTo: "DE", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_DE", pinterestRegion: "DE" },
+    AT: { label: "Österreich", currency: "EUR", serpGeo: "AT", serpLanguage: "de", aliexpressShipTo: "AT", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_AT", pinterestRegion: "DE+AT+CH" },
+    CH: { label: "Schweiz", currency: "CHF", serpGeo: "CH", serpLanguage: "de", aliexpressShipTo: "CH", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_CH", pinterestRegion: "DE+AT+CH" },
+    GB: { label: "Vereinigtes Königreich", currency: "GBP", serpGeo: "GB", serpLanguage: "en", aliexpressShipTo: "UK", aliexpressLanguage: "EN", ebayMarketplace: "EBAY_GB", pinterestRegion: "GB+IE" },
   } satisfies Record<Country, CountryProfile>,
 
   /**
    * Wechselkurse: Einheiten der Währung pro 1 EUR.
-   * ANNAHME: feste, gerundete Kurse (Stand September 2026) – regelmäßig manuell pflegen.
+   * Feste, gerundete Kurse (EZB, 25.09.2026). Sie gelten nur, wenn `fxUpdate.source` = "config"
+   * ist oder die EZB nicht erreichbar ist.
    * USD nur als Sicherheitsnetz, falls eine Quelle nicht in EUR liefert; CNY für 1688.
    */
-  fx: { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.17, CNY: 8.3 } as Record<string, number> & Record<Currency | "USD" | "CNY", number>,
+  fx: { EUR: 1, CHF: 0.94, GBP: 0.86, USD: 1.14, CNY: 7.66 } as Record<string, number> & Record<Currency | "USD" | "CNY", number>,
+
+  /** Tageskurse der Europäischen Zentralbank vor jedem Lauf (kostenlos, ohne Konto) */
+  fxUpdate: {
+    source: "ezb" as "ezb" | "config",
+    url: "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
+    /** Die EZB veröffentlicht werktags; ältere Kurse werden mit Warnung genutzt */
+    maxAgeDays: 5,
+  },
 
   demand: {
     /**
@@ -328,6 +342,39 @@ export const radarConfig = {
     maxLookupsPerCountry: 5,
   },
 
+  /**
+   * eBay Browse API (kostenlos, 5.000 Aufrufe/Tag, Client-Credentials): je Keyword und Land eine Suche
+   * nach Neuware zum Festpreis. Liefert die Angebotszahl (Wettbewerb) und einen zweiten Referenzpreis,
+   * der für alle Keywords greift, die keinen Google-Shopping-Preis bekommen.
+   */
+  marketplace: {
+    /** Angebote in der Stichprobe (API-Maximum 200) */
+    sampleSize: 100,
+    /** Versandorte, die als Direktversand aus Asien gelten – andere Dropshipper mit derselben Quelle */
+    asiaLocations: ["CN", "HK"],
+    /**
+     * Mindestzahl Angebote mit Versand außerhalb Asiens für einen Median-Preis.
+     * ANNAHME: Asien-Direktversand wird aus dem Preis herausgerechnet, weil er nicht zeigt, was Kunden
+     * bei einem Shop mit Lager in Europa zahlen.
+     */
+    minPriceSamples: 5,
+  },
+
+  /**
+   * Pinterest Trends API (kostenlos, App-Freigabe nötig): steigende Suchbegriffe je Region mit Wochenkurve.
+   * Stark bei Wohnen, Deko und Geschenken; oft früher als Google.
+   */
+  pinterest: {
+    /** "growing" = Begriffe mit dem stärksten Zuwachs – passt zur Früherkennung */
+    trendType: "growing",
+    /** ANNAHME: Interessen mit physischen Produkten aus nexanas Sortimentsrichtung */
+    interests: ["home_decor", "electronics", "beauty", "diy_and_crafts", "gardening", "animals", "sport", "parenting", "health", "event_planning"],
+    /** Begriffe je Abfrage (API-Maximum 50) */
+    limit: 50,
+    /** Allgemeine Begriffe ohne Produktbezug – werden vor der Klassifizierung verworfen */
+    ignore: ["ideen", "ideas", "inspiration", "aesthetic", "wallpaper"],
+  },
+
   // ANNAHME: Startparameter; nach einigen Wochen Historie an echten Drop-Erfolgen kalibrieren.
   trend: {
     recentWeeks: 4,
@@ -360,8 +407,14 @@ export const radarConfig = {
      * ANNAHME: Ab ~100 aktiven Werbetreibenden für einen Suchbegriff ist der Markt gesättigt.
      */
     advertisersLogCap: 2,
-    // ANNAHME: Werbedruck ist der direkteste Beleg für westliche Konkurrenz und zählt daher am meisten.
-    weights: { results: 0.25, orders: 0.25, advertisers: 0.5 },
+    /**
+     * log10(1 + eBay-Angebote im Zielland), bei dem die Marktplatz-Sättigung 1 erreicht (4 ≈ 10.000 Angebote).
+     * ANNAHME: Ab ~10.000 Neuware-Angeboten auf eBay ist ein Produkt im Zielland Massenware.
+     */
+    marketplaceLogCap: 4,
+    // ANNAHME: Werbedruck ist der direkteste Beleg für westliche Konkurrenz und zählt daher am meisten,
+    // danach das Angebot auf eBay im Zielland; AliExpress zeigt nur die Verfügbarkeit in China.
+    weights: { results: 0.15, orders: 0.2, marketplace: 0.25, advertisers: 0.4 },
   },
 
   // ANNAHME: Startgewichte – Früherkennung zählt am meisten, Wettbewerb ist in Phase 1 nur ein grober Proxy.

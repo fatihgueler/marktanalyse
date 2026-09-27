@@ -239,3 +239,12 @@ model DropOutcome {
 
   @@index([productId, country])
 }
+
+/// Rotierende Refresh-Tokens (Pinterest gibt bei jeder Erneuerung einen neuen aus, gültig 60 Tage).
+/// Gespeichert, damit der wöchentliche Lauf den Zugang selbst am Leben hält.
+model ApiToken {
+  provider     String    @id
+  refreshToken String
+  expiresAt    DateTime?
+  updatedAt    DateTime  @updatedAt
+}

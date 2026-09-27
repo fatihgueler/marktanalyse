@@ -46,6 +46,21 @@ export interface FetchOptions {
 }
 
 export async function fetchJson<T>(url: string, init: RequestInit = {}, throttle?: Throttle, options: FetchOptions = {}): Promise<T> {
+  return fetchWithRetry(url, init, throttle, options, async (response) => (await response.json()) as T);
+}
+
+/** Wie `fetchJson`, liefert aber den Rohtext (z. B. XML). */
+export async function fetchText(url: string, init: RequestInit = {}, throttle?: Throttle, options: FetchOptions = {}): Promise<string> {
+  return fetchWithRetry(url, init, throttle, options, (response) => response.text());
+}
+
+async function fetchWithRetry<T>(
+  url: string,
+  init: RequestInit,
+  throttle: Throttle | undefined,
+  options: FetchOptions,
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
   const safeUrl = url.split("?")[0] ?? url;
   const maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
   const timeoutMs = options.timeoutMs ?? radarConfig.collect.requestTimeoutMs;
@@ -58,7 +73,7 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}, throttle
         ...init,
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (response.ok) return (await response.json()) as T;
+      if (response.ok) return await read(response);
 
       const body = await response.text().catch(() => null);
       const error = new HttpError(`HTTP ${response.status} bei ${safeUrl}`, response.status, body?.slice(0, 500) ?? null);

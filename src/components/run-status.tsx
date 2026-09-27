@@ -1,4 +1,4 @@
-import { CircleCheck, FlaskConical, Radio, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleOff, FlaskConical, Radio, TriangleAlert } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { sourceLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -43,16 +43,23 @@ export function RunStatus({ startedAt, status, sourceModes, notes }: RunStatusPr
         <ul className="flex flex-wrap gap-1.5" aria-label="Datenquellen">
           {Object.entries(sourceModes).map(([source, mode]) => {
             const live = mode === "live";
+            const off = mode === "off";
             return (
               <li
                 key={source}
                 className={cn(
                   "flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px]",
-                  live ? "border-primary/40 text-foreground" : "border-status-warning/40 text-status-warning",
+                  live ? "border-primary/40 text-foreground" : off ? "border-border text-muted-foreground" : "border-status-warning/40 text-status-warning",
                 )}
               >
-                {live ? <Radio className="size-3" aria-hidden="true" /> : <FlaskConical className="size-3" aria-hidden="true" />}
-                {sourceLabel(source)}: {live ? "Live" : "Demo-Daten"}
+                {live ? (
+                  <Radio className="size-3" aria-hidden="true" />
+                ) : off ? (
+                  <CircleOff className="size-3" aria-hidden="true" />
+                ) : (
+                  <FlaskConical className="size-3" aria-hidden="true" />
+                )}
+                {sourceLabel(source)}: {live ? "Live" : off ? "aus" : "Demo-Daten"}
               </li>
             );
           })}
