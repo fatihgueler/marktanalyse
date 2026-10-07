@@ -1,8 +1,9 @@
 // Nur aus Server Components aufrufen (nutzt Prisma).
-import { CATEGORY_IDS, COUNTRIES, type CategoryId, type Country } from "@/config/radar.config";
+import { CATEGORY_IDS, COUNTRIES, radarConfig, type CategoryId, type Country } from "@/config/radar.config";
 import type { Prisma } from "@/generated/prisma/client";
 import type { CalibrationRow } from "@/scoring/calibration";
 import type { CandidateBreakdown } from "@/scoring/score";
+import { isLiveOperation } from "@/sources/readiness";
 import type { TrendPoint } from "@/sources/types";
 import type { CheckView } from "@/app/check/actions";
 import { getDb } from "./db";
@@ -14,6 +15,8 @@ export interface CandidateFilters {
   country: Country | null;
   category: CategoryId | null;
   sort: SortKey;
+  /** nur „Neu diese Woche“ (neue und deutlich gestiegene Produkte) */
+  onlyNew: boolean;
 }
 
 /** URL-Parameter defensiv lesen – ungültige Werte werden ignoriert statt Fehler zu werfen. */
@@ -26,6 +29,7 @@ export function parseFilters(params: Record<string, string | string[] | undefine
     country: COUNTRIES.includes(land as Country) ? (land as Country) : null,
     category: CATEGORY_IDS.includes(kategorie as CategoryId) ? (kategorie as CategoryId) : null,
     sort: SORT_KEYS.includes(sort as SortKey) ? (sort as SortKey) : "score",
+    onlyNew: pick("neu") === "1",
   };
 }
 
@@ -35,6 +39,31 @@ export async function getLatestRun() {
     where: { status: { in: ["SUCCEEDED", "PARTIAL"] }, finishedAt: { not: null } },
     orderBy: { startedAt: "desc" },
     include: { _count: { select: { candidates: true, demandSignals: true } } },
+  });
+}
+
+/**
+ * Vergleichslauf für „Neu diese Woche“: der letzte abgeschlossene Lauf, der mindestens
+ * `ranking.compareMinDaysBack` Tage vor `run` begann und von derselben Art ist (echt bzw. Demo).
+ * Sonst stünde beim ersten echten Lauf alles als „neu“ da.
+ */
+export async function getComparisonRun(run: { startedAt: Date; sourceModes: unknown }) {
+  const cutoff = new Date(run.startedAt.getTime() - radarConfig.ranking.compareMinDaysBack * 24 * 60 * 60 * 1000);
+  const live = isLiveOperation(run.sourceModes as Record<string, string>);
+  const earlier = await getDb().run.findMany({
+    where: { status: { in: ["SUCCEEDED", "PARTIAL"] }, finishedAt: { not: null }, startedAt: { lte: cutoff } },
+    orderBy: { startedAt: "desc" },
+    take: 20,
+    select: { id: true, startedAt: true, sourceModes: true, configVersion: true },
+  });
+  return earlier.find((r) => isLiveOperation(r.sourceModes as Record<string, string>) === live) ?? null;
+}
+
+/** Kandidaten eines früheren Laufs für den Vergleich – nur Land, Produkt, Keyword und Score. */
+export async function getPreviousCandidates(runId: string, country: Country | null) {
+  return getDb().candidateSnapshot.findMany({
+    where: { runId, ...(country ? { country } : {}) },
+    select: { productId: true, keyword: true, country: true, totalScore: true },
   });
 }
 

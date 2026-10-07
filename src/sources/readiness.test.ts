@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mixedModeWarnings, unusableLiveRunReason } from "./readiness";
+import { isLiveOperation, mixedModeWarnings, unusableLiveRunReason } from "./readiness";
 import type { RunSourceMode } from "./types";
 
 const ALL_MOCK: Record<string, RunSourceMode> = {
@@ -64,5 +64,13 @@ describe("unusableLiveRunReason", () => {
   it("stoppt Trends ohne jede Angebotsquelle und Angebote ohne Trends", () => {
     expect(unusableLiveRunReason({ ...ALL_MOCK, "google-trends": "live" })).toMatch(/AliExpress/);
     expect(unusableLiveRunReason({ ...ALL_MOCK, aliexpress: "live" })).toMatch(/Trendquelle/);
+  });
+});
+
+describe("isLiveOperation", () => {
+  it("zählt nur Trend- und Angebotsquellen, nicht EZB oder Claude", () => {
+    expect(isLiveOperation({ ...ALL_MOCK, "ezb-kurse": "live", claude: "live" })).toBe(false);
+    expect(isLiveOperation({ ...ALL_MOCK, "pinterest-trends": "live" })).toBe(true);
+    expect(isLiveOperation({ ...ALL_MOCK, aliexpress: "live" })).toBe(true);
   });
 });

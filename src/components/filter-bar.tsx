@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Sparkles } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -20,10 +20,12 @@ interface FilterBarProps {
   categories: FilterOption[];
   sorts: FilterOption[];
   current: { country: string | null; category: string | null; sort: string };
+  /** Schalter „Neu diese Woche“; fehlt, solange es keinen Vergleichslauf gibt */
+  newToggle?: { count: number; active: boolean };
 }
 
 /** Filter liegen in der URL: teilbar, Zurück-Taste funktioniert, Server rendert die gefilterte Liste. */
-export function FilterBar({ countries, categories, sorts, current }: FilterBarProps) {
+export function FilterBar({ countries, categories, sorts, current, newToggle }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -100,6 +102,22 @@ export function FilterBar({ countries, categories, sorts, current }: FilterBarPr
           </SelectContent>
         </Select>
       </label>
+
+      {newToggle ? (
+        <button
+          type="button"
+          aria-pressed={newToggle.active}
+          onClick={() => navigate("neu", newToggle.active ? ALL : "1")}
+          className={cn(
+            "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors",
+            newToggle.active ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-accent",
+          )}
+        >
+          <Sparkles className="size-4" aria-hidden="true" />
+          Neu diese Woche
+          <span className={cn("rounded-full px-1.5 text-xs tabular", newToggle.active ? "bg-primary-foreground/20" : "bg-muted")}>{newToggle.count}</span>
+        </button>
+      ) : null}
 
       <span className="flex h-9 items-center" aria-live="polite">
         {pending ? (

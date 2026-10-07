@@ -538,6 +538,14 @@ export const radarConfig = {
     /** Wachstum gegenüber der Vorperiode (1 = Verdopplung) für „stark steigend“ bzw. „steigend“; darunter „leicht steigend“ */
     growthStrongMin: 1,
     growthMin: 0.25,
+    /**
+     * „Neu diese Woche“: verglichen wird mit dem letzten Lauf, der mindestens so viele Tage vor dem aktuellen
+     * gestartet ist – ein zweiter Lauf am selben Tag soll den Vergleich nicht aushebeln.
+     * ANNAHME: 5 Tage, damit ein verschobener Wochenlauf (Dienstag statt Montag) trotzdem die Vorwoche trifft.
+     */
+    compareMinDaysBack: 5,
+    /** ANNAHME: Ab 10 Punkten Plus gegenüber dem Vergleichslauf gilt ein Produkt als „deutlich gestiegen“. */
+    risingMinPoints: 10,
   },
 
   calibration: {

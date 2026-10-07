@@ -6,8 +6,20 @@ import { RunStatus, type RunNote } from "@/components/run-status";
 import { CATEGORY_IDS, COUNTRIES, radarConfig, type CategoryId } from "@/config/radar.config";
 import { groupCandidates, type CandidateGroup } from "@/lib/candidate-groups";
 import { formatMoneyRounded, formatPercent } from "@/lib/format";
+import { groupMovement, indexPrevious, type Movement } from "@/lib/movement";
 import { STAGE_LABELS } from "@/lib/pipeline";
-import { getCandidates, getCategoryCounts, getLatestRun, getProductChecks, parseFilters, type CandidateRow, type CheckRow, type SortKey } from "@/lib/queries";
+import {
+  getCandidates,
+  getCategoryCounts,
+  getComparisonRun,
+  getLatestRun,
+  getPreviousCandidates,
+  getProductChecks,
+  parseFilters,
+  type CandidateRow,
+  type CheckRow,
+  type SortKey,
+} from "@/lib/queries";
 import { shortTitle } from "@/lib/short-title";
 import type { CheckVerdict } from "@/scoring/product-check";
 import { competitionLevel, rankingVerdict, trendSummary } from "@/scoring/ranking";
@@ -28,7 +40,17 @@ function marginText(abs: number, pct: number, currency: string): string {
   return `${formatMoneyRounded(abs, currency)} · ${formatPercent(pct)}`;
 }
 
-function cardFromGroup(group: CandidateGroup<CandidateRow>): ProductCardData {
+const SHORT_DATE = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", timeZone: "Europe/Berlin" });
+
+function movementBadge(movement: Movement, since: Date): ProductCardData["movement"] {
+  if (!movement) return null;
+  const date = SHORT_DATE.format(since);
+  return movement.kind === "neu"
+    ? { label: "Neu", title: `nicht im Lauf vom ${date}` }
+    : { label: `+${movement.delta} Punkte`, title: `gegenüber dem Lauf vom ${date}` };
+}
+
+function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCardData["movement"]): ProductCardData {
   const { best } = group;
   const verdict = rankingVerdict({
     trend: best.breakdown.trend,
@@ -48,6 +70,7 @@ function cardFromGroup(group: CandidateGroup<CandidateRow>): ProductCardData {
       { label: "Konkurrenz", value: competitionLevel(best.breakdown.competition) },
     ],
     chips: group.countries.map((c) => `${c.country} ${c.score}`),
+    movement,
     externalUrl: best.product.url,
   };
 }
@@ -89,7 +112,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? await Promise.all([getCandidates(run.id, filters), getCategoryCounts(run.id, filters.country)])
     : [[] as CandidateRow[], new Map<string, number>()];
   for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
-  const groups = groupCandidates(rows, filters.sort);
+  const allGroups = groupCandidates(rows, filters.sort);
+
+  // „Neu diese Woche“: Vergleich mit dem Lauf von vor mindestens `compareMinDaysBack` Tagen.
+  const comparison = run ? await getComparisonRun(run) : null;
+  const previous = comparison ? indexPrevious(await getPreviousCandidates(comparison.id, filters.country)) : null;
+  const movements = new Map(allGroups.map((g) => [g.best.id, previous ? groupMovement(g.rows, previous) : null]));
+  const moved = allGroups.filter((g) => movements.get(g.best.id));
+  const newCount = moved.filter((g) => movements.get(g.best.id)?.kind === "neu").length;
+  const onlyNew = filters.onlyNew && comparison !== null;
+  const groups = onlyNew ? moved : allGroups;
+  const shownManual = onlyNew ? [] : manual;
   const notes = run && Array.isArray(run.errors) ? (run.errors as unknown as RunNote[]) : [];
 
   return (
@@ -102,7 +135,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               Drop-Kandidaten
             </h1>
             <p className="text-sm text-muted-foreground tabular">
-              {groups.length} Produkte{manual.length > 0 ? ` · ${manual.length} eigene` : ""}
+              {groups.length} {groups.length === 1 ? "Produkt" : "Produkte"}{shownManual.length > 0 ? ` · ${shownManual.length} eigene` : ""}
             </p>
           </div>
           {run ? (
@@ -110,6 +143,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <p className="text-sm text-muted-foreground">Noch kein Datenlauf. Eigene Produkte prüfst du im Produkt-Check.</p>
           )}
+          {run ? (
+            <p className="text-sm text-muted-foreground">
+              {comparison
+                ? `Seit dem Lauf vom ${SHORT_DATE.format(comparison.startedAt)}: ${newCount} neu, ${moved.length - newCount} deutlich gestiegen.` +
+                  (comparison.configVersion !== run.configVersion ? " Die Bewertungsregeln wurden seitdem geändert, Punktsprünge können auch daher kommen." : "")
+                : `„Neu diese Woche“ erscheint, sobald es einen Lauf gibt, der mindestens ${radarConfig.ranking.compareMinDaysBack} Tage älter ist.`}
+            </p>
+          ) : null}
         </section>
 
         <FilterBar
@@ -121,15 +162,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           }))}
           sorts={SORT_OPTIONS}
           current={{ country: filters.country, category: filters.category, sort: filters.sort }}
+          newToggle={comparison ? { count: moved.length, active: onlyNew } : undefined}
         />
 
-        {manual.length > 0 ? (
+        {shownManual.length > 0 ? (
           <section aria-labelledby="eigene-titel" className="grid gap-3">
             <h2 id="eigene-titel" className="text-lg font-semibold">
               Eigene Produkte
             </h2>
             <ul className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {manual.map((check) => (
+              {shownManual.map((check) => (
                 <ProductCard key={check.id} data={cardFromCheck(check)} />
               ))}
             </ul>
@@ -138,7 +180,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         {groups.length > 0 ? (
           <section aria-labelledby="auto-titel" className="grid gap-3">
-            {manual.length > 0 ? (
+            {shownManual.length > 0 ? (
               <h2 id="auto-titel" className="text-lg font-semibold">
                 Automatisch gefunden
               </h2>
@@ -149,14 +191,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             )}
             <ul className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
               {groups.map((group) => (
-                <ProductCard key={group.best.id} data={cardFromGroup(group)} />
+                <ProductCard key={group.best.id} data={cardFromGroup(group, comparison ? movementBadge(movements.get(group.best.id) ?? null, comparison.startedAt) : null)} />
               ))}
             </ul>
           </section>
         ) : null}
 
-        {groups.length === 0 && manual.length === 0 ? (
-          run ? (
+        {groups.length === 0 && shownManual.length === 0 ? (
+          onlyNew ? (
+            <EmptyState
+              icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />}
+              title="Diese Woche nichts Neues"
+              text="Kein neues oder deutlich gestiegenes Produkt für diese Filter. Schalte „Neu diese Woche“ aus, um alle zu sehen."
+            />
+          ) : run ? (
             <EmptyState icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />} title="Keine Produkte für diese Filter" text="Wähle ein anderes Land oder eine andere Kategorie." />
           ) : (
             <EmptyState

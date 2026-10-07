@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Package } from "lucide-react";
+import { ArrowUpRight, Package, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CheckVerdict } from "@/scoring/product-check";
 import type { RankingVerdict } from "@/scoring/ranking";
@@ -36,6 +36,8 @@ export interface ProductCardData {
   chips: string[];
   /** Hinweis wie „Merkliste: Geprüft“ */
   badge?: string;
+  /** „Neu“ oder „+12 Punkte“ gegenüber dem Vergleichslauf */
+  movement?: { label: string; title: string } | null;
   externalUrl?: string | null;
 }
 
@@ -83,6 +85,13 @@ export function ProductCard({ data }: { data: ProductCardData }) {
           ))}
         </dl>
         <div className="flex flex-wrap items-center gap-1.5">
+          {data.movement ? (
+            <span title={data.movement.title} className="inline-flex items-center gap-1 rounded-md bg-primary/12 px-2 py-0.5 text-xs font-semibold text-primary">
+              <Sparkles className="size-3.5" aria-hidden="true" />
+              {data.movement.label}
+              <span className="sr-only"> ({data.movement.title})</span>
+            </span>
+          ) : null}
           {data.chips.map((chip) => (
             <span key={chip} className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium tabular">
               {chip}

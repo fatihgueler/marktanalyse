@@ -3,6 +3,11 @@ import type { RunSourceMode } from "./types";
 const TREND_SOURCES = ["google-trends", "tiktok-trends", "pinterest-trends"];
 const SUPPLY_SOURCES = ["aliexpress", "alibaba-1688"];
 
+/** Echtbetrieb = mindestens eine Trend- oder Angebotsquelle lief live (sonst Demo-Lauf). */
+export function isLiveOperation(modes: Record<string, RunSourceMode | string>): boolean {
+  return [...TREND_SOURCES, ...SUPPLY_SOURCES].some((id) => modes[id] === "live");
+}
+
 /**
  * Hinweise zum Echtbetrieb mit unvollständigen Keys. Demo-Quellen sind dann abgeschaltet
  * (siehe `createSources`); die Hinweise sagen, welches Signal deshalb fehlt und welcher Key hilft.
