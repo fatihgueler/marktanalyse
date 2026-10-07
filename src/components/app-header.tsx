@@ -10,6 +10,7 @@ const NAV = [
   { href: "/check", label: "Produkt-Check", key: "check" },
   { href: "/merkliste", label: "Merkliste", key: "merkliste" },
   { href: "/kalibrierung", label: "Kalibrierung", key: "kalibrierung" },
+  { href: "/rueckblick", label: "Rückblick", key: "rueckblick" },
   { href: "/quellen", label: "Quellen", key: "quellen" },
 ] as const;
 

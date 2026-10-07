@@ -560,6 +560,24 @@ export const radarConfig = {
     risingMinPoints: 10,
   },
 
+  /**
+   * Rückblick-Test: Eine mehrjährige Google-Trends-CSV wird Woche für Woche so bewertet, als liefe der Radar damals.
+   * Nur der Trend lässt sich rückwirkend nachstellen – Marge und Wettbewerb von damals sind unbekannt.
+   */
+  backtest: {
+    /** Fenster je Bewertung wie im Echtbetrieb (SerpApi liefert 12 Monate), jeweils neu auf 100 normiert */
+    windowWeeks: 52,
+    /**
+     * Ab diesem Trend-Score gilt eine Woche als Signal.
+     * ANNAHME: 0,5 entspricht etwa „Jetzt testen“ (Gesamtscore ≥ 60) bei guter Marge und mittlerem Wettbewerb.
+     */
+    signalMinTrendScore: 0.5,
+    /** Signale höchstens so viele Wochen vor dem Höhepunkt zählen als Treffer; frühere werden extra gezählt */
+    leadWindowWeeks: 26,
+    /** ANNAHME: Bestellen, Lieferung und Drop-Vorbereitung brauchen etwa 4 Wochen – weniger Vorlauf ist „knapp“ */
+    goodLeadWeeks: 4,
+  },
+
   calibration: {
     /** Mindestanzahl Drops je Gruppe (Top und Flop), bevor eine Aussage angezeigt wird */
     minPerGroup: 3,

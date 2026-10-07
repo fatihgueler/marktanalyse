@@ -27,6 +27,7 @@ export function makeTestConfig(): RadarConfig {
   config.fees = { paymentFeePct: 0.021, paymentFeeFixedEur: 0.3 };
   config.margin = { minMarginPct: 0.2, targetMarginPct: 0.55, minMarginAbsEur: 8 };
   config.ranking = { testNowMinScore: 60, competitionHighBelow: 0.35, competitionLowMin: 0.6, growthStrongMin: 1, growthMin: 0.25, compareMinDaysBack: 5, risingMinPoints: 10 };
+  config.backtest = { windowWeeks: 52, signalMinTrendScore: 0.5, leadWindowWeeks: 26, goodLeadWeeks: 4 };
   config.productCheck = { worthIt: { minMarginPct: 0.35, minMarginAbsEur: 15 }, tight: { minMarginPct: 0.2, minMarginAbsEur: 8 }, earlyPhaseMin: 0.5 };
   config.trend = {
     recentWeeks: 4,
