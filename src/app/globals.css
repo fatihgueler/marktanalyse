@@ -2,52 +2,107 @@
 @import "tw-animate-css";
 
 /*
- * Trend-Radar – „Radar-Terminal“
- * Warme, fast schwarze Oberfläche; eine Signalfarbe (Phosphor-Grün) nur für Bedienelemente
- * und Hervorhebungen. Datenfarben kommen aus der validierten Palette (--series-*), nie aus UI-Farben.
+ * Trend-Radar – ruhiges Arbeitswerkzeug, hell und dunkel.
+ * Helles Thema als Grundlage; dunkles folgt der Systemeinstellung oder der Wahl im Kopf (data-theme).
+ * Eine Akzentfarbe (Grün) nur für Bedienelemente; Urteile nutzen die Statusfarben, Diagramme die --series-*.
  */
 :root {
-  color-scheme: dark;
-  --radius: 0.625rem;
+  color-scheme: light;
+  --radius: 0.75rem;
 
-  --background: #121211;
-  --foreground: #f2f1ec;
-  --card: #1a1a19;
+  --background: #f5f6f8;
+  --foreground: #14171c;
+  --card: #ffffff;
   --card-foreground: var(--foreground);
-  --popover: #20201e;
+  --popover: #ffffff;
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.88 0.19 125);
-  --primary-foreground: #121211;
-  --secondary: #242422;
+  --primary: #23803f;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f3;
   --secondary-foreground: var(--foreground);
-  --muted: #242422;
-  --muted-foreground: #a3a29a;
-  --subtle-foreground: #7d7c75;
-  --accent: #2a2a27;
+  --muted: #eef0f3;
+  --muted-foreground: #4a525e;
+  --subtle-foreground: #656d79;
+  --accent: #eaedf1;
   --accent-foreground: var(--foreground);
-  --destructive: #e66767;
-  --border: #2e2e2b;
-  --input: #34342f;
-  --ring: oklch(0.88 0.19 125);
+  --destructive: #c42f2f;
+  --border: #dde1e7;
+  --input: #cfd5dd;
+  --ring: #23803f;
 
-  /* Datenfarben: Referenzpalette, dunkle Stufen, validiert gegen #1a1a19 (alle Paare) */
-  --series-trend: #3987e5;
-  --series-margin: #d95926;
-  --series-competition: #199e70;
-  /* Status (nie als Serie verwendet, immer mit Icon + Text) */
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-critical: #d03b3b;
+  --series-trend: #2a72cc;
+  --series-margin: #c4511f;
+  --series-competition: #13875e;
+  --status-good: #1a7f37;
+  --status-warning: #9a6200;
+  --status-critical: #c42f2f;
 
   --chart-1: var(--series-trend);
   --chart-2: var(--series-margin);
   --chart-3: var(--series-competition);
-  --chart-4: #c98500;
-  --chart-5: #d55181;
+  --chart-4: #a86f00;
+  --chart-5: #c0407a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: #121418;
+    --foreground: #eceef1;
+    --card: #1a1d22;
+    --popover: #1f2329;
+    --primary: #7fcf86;
+    --primary-foreground: #0f1a11;
+    --secondary: #23272e;
+    --muted: #23272e;
+    --muted-foreground: #b6bcc6;
+    --subtle-foreground: #9198a3;
+    --accent: #272c34;
+    --destructive: #f07070;
+    --border: #2d323b;
+    --input: #3a404b;
+    --ring: #7fcf86;
+    --series-trend: #4b93ea;
+    --series-margin: #e0703c;
+    --series-competition: #2bb07f;
+    --status-good: #4cc15f;
+    --status-warning: #e6b84c;
+    --status-critical: #f07070;
+    --chart-4: #d9a43a;
+    --chart-5: #e0679b;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #121418;
+  --foreground: #eceef1;
+  --card: #1a1d22;
+  --popover: #1f2329;
+  --primary: #7fcf86;
+  --primary-foreground: #0f1a11;
+  --secondary: #23272e;
+  --muted: #23272e;
+  --muted-foreground: #b6bcc6;
+  --subtle-foreground: #9198a3;
+  --accent: #272c34;
+  --destructive: #f07070;
+  --border: #2d323b;
+  --input: #3a404b;
+  --ring: #7fcf86;
+  --series-trend: #4b93ea;
+  --series-margin: #e0703c;
+  --series-competition: #2bb07f;
+  --status-good: #4cc15f;
+  --status-warning: #e6b84c;
+  --status-critical: #f07070;
+  --chart-4: #d9a43a;
+  --chart-5: #e0679b;
 }
 
 @theme inline {
-  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
   --color-background: var(--background);
@@ -111,13 +166,10 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    /* feines Radar-Raster als Atmosphäre, bleibt hinter dem Inhalt */
-    background-image:
-      radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.88 0.19 125 / 0.07), transparent 70%),
-      linear-gradient(to right, oklch(1 0 0 / 0.025) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(1 0 0 / 0.025) 1px, transparent 1px);
-    background-size: 100% 100%, 48px 48px, 48px 48px;
-    background-attachment: fixed;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    text-wrap: balance;
   }
   :focus-visible {
     outline: 2px solid var(--ring);

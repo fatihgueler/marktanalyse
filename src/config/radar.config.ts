@@ -549,6 +549,23 @@ export const radarConfig = {
     earlyPhaseMin: 0.5,
   },
 
+  /**
+   * Rangliste in Worten. Urteil je Produkt, in dieser Reihenfolge geprüft:
+   * „Marge zu dünn“ (unter der Mindestmarge) → „Beobachten“ (Signal als Rauschen verworfen) →
+   * „Zu spät“ (Interesse steigt nicht mehr oder Wettbewerb hoch) → „Jetzt testen“ (Gesamtscore ab
+   * `testNowMinScore`) → sonst „Beobachten“.
+   * ANNAHME: Startwerte; nach den ersten echten Drops mit der Kalibrierung abgleichen.
+   */
+  ranking: {
+    testNowMinScore: 60,
+    /** Wettbewerb-Teilscore (1 = wenig Wettbewerb): darunter „hoch“, ab `competitionLowMin` „niedrig“ */
+    competitionHighBelow: 0.35,
+    competitionLowMin: 0.6,
+    /** Wachstum gegenüber der Vorperiode (1 = Verdopplung) für „stark steigend“ bzw. „steigend“; darunter „leicht steigend“ */
+    growthStrongMin: 1,
+    growthMin: 0.25,
+  },
+
   calibration: {
     /** Mindestanzahl Drops je Gruppe (Top und Flop), bevor eine Aussage angezeigt wird */
     minPerGroup: 3,

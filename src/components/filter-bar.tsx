@@ -57,7 +57,7 @@ export function FilterBar({ countries, categories, sorts, current }: FilterBarPr
                 navigate("land", option.value);
               }}
               className={cn(
-                "rounded-md px-3 py-1.5 font-mono text-xs font-medium tracking-wide transition-colors",
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
@@ -67,10 +67,10 @@ export function FilterBar({ countries, categories, sorts, current }: FilterBarPr
         })}
       </nav>
 
-      <label className="grid gap-1 text-xs text-muted-foreground">
+      <label className="grid flex-1 gap-1 text-xs text-muted-foreground sm:flex-none">
         Kategorie
         <Select value={current.category ?? ALL} onValueChange={(value) => navigate("kategorie", value)}>
-          <SelectTrigger className="h-9 w-52 bg-card" aria-label="Kategorie filtern">
+          <SelectTrigger className="h-9 w-full bg-card sm:w-52" aria-label="Kategorie filtern">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -78,17 +78,17 @@ export function FilterBar({ countries, categories, sorts, current }: FilterBarPr
             {categories.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
-                {option.count !== undefined ? <span className="ml-auto pl-3 font-mono text-subtle-foreground">{option.count}</span> : null}
+                {option.count !== undefined ? <span className="ml-auto pl-3 text-subtle-foreground tabular">{option.count}</span> : null}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </label>
 
-      <label className="grid gap-1 text-xs text-muted-foreground">
+      <label className="grid flex-1 gap-1 text-xs text-muted-foreground sm:flex-none">
         Sortierung
         <Select value={current.sort} onValueChange={(value) => navigate("sort", value)}>
-          <SelectTrigger className="h-9 w-44 bg-card" aria-label="Sortierung wählen">
+          <SelectTrigger className="h-9 w-full bg-card sm:w-44" aria-label="Sortierung wählen">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

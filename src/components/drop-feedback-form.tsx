@@ -59,15 +59,15 @@ export function DropFeedbackForm({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="grid gap-1.5">
           <Label htmlFor="droppedAt">Gedroppt am</Label>
-          <Input id="droppedAt" name="droppedAt" type="date" required max={today} defaultValue={today} className="font-mono" />
+          <Input id="droppedAt" name="droppedAt" type="date" required max={today} defaultValue={today}  />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="unitsSold">Verkaufte Stück</Label>
-          <Input id="unitsSold" name="unitsSold" type="number" min={0} step={1} inputMode="numeric" className="font-mono" />
+          <Input id="unitsSold" name="unitsSold" type="number" min={0} step={1} inputMode="numeric"  />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="returnRatePercent">Retourenquote (%)</Label>
-          <Input id="returnRatePercent" name="returnRatePercent" type="number" min={0} max={100} step={0.1} inputMode="decimal" className="font-mono" />
+          <Input id="returnRatePercent" name="returnRatePercent" type="number" min={0} max={100} step={0.1} inputMode="decimal"  />
         </div>
       </div>
       <div className="grid gap-1.5">

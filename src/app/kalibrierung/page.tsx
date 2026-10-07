@@ -58,7 +58,7 @@ export default async function CalibrationPage() {
       <AppHeader active="kalibrierung" />
       <main id="inhalt" className="mx-auto grid max-w-[1200px] gap-8 px-4 pb-16 pt-8 sm:px-6">
         <section aria-labelledby="titel" className="animate-rise grid gap-2">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Kalibrierung</p>
+          <p className="text-sm font-medium text-primary">Kalibrierung</p>
           <h1 id="titel" className="text-3xl font-bold tracking-tight">Welche Signale sagen Erfolg voraus?</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Vergleicht die Scores zum Zeitpunkt der Drop-Entscheidung zwischen Top- und Flop-Drops. Die Empfehlungen ändern nichts automatisch – Gewichte passt ihr bewusst in{" "}
@@ -70,7 +70,7 @@ export default async function CalibrationPage() {
           {(["TOP", "OK", "FLOP"] as const).map((verdict) => (
             <div key={verdict} className="rounded-lg border bg-card p-3">
               <dt className="text-xs text-muted-foreground">{verdict === "TOP" ? "Top" : verdict === "OK" ? "Okay" : "Flop"}</dt>
-              <dd className="font-mono text-2xl font-semibold tabular">{result.counts[verdict]}</dd>
+              <dd className="text-2xl font-semibold tabular">{result.counts[verdict]}</dd>
             </div>
           ))}
         </dl>
@@ -98,7 +98,7 @@ export default async function CalibrationPage() {
               <div className="overflow-x-auto rounded-xl border bg-card">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead>
-                    <tr className="border-b text-left font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                       <th scope="col" className="px-4 py-3 font-medium">Signal</th>
                       <th scope="col" className="px-4 py-3 text-right font-medium">Ø Top</th>
                       <th scope="col" className="px-4 py-3 text-right font-medium">Ø Flop</th>
@@ -114,9 +114,9 @@ export default async function CalibrationPage() {
                           {SIGNAL_LABELS[stat.key].label}
                           <span className="block text-[11px] font-normal text-subtle-foreground">{SIGNAL_LABELS[stat.key].hint}</span>
                         </th>
-                        <td className="px-4 py-3 text-right font-mono tabular">{formatSignal(stat.key, stat.topMean)}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular">{formatSignal(stat.key, stat.flopMean)}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular">{formatSignal(stat.key, stat.difference)}</td>
+                        <td className="px-4 py-3 text-right tabular">{formatSignal(stat.key, stat.topMean)}</td>
+                        <td className="px-4 py-3 text-right tabular">{formatSignal(stat.key, stat.flopMean)}</td>
+                        <td className="px-4 py-3 text-right tabular">{formatSignal(stat.key, stat.difference)}</td>
                         <td className={cn("px-4 py-3", ASSESSMENT_STYLE[stat.assessment])}>{stat.assessment}</td>
                         <td className="px-4 py-3 text-muted-foreground">{recommendation(stat)}</td>
                       </tr>
@@ -131,7 +131,7 @@ export default async function CalibrationPage() {
               <div className="overflow-x-auto rounded-xl border bg-card">
                 <table className="w-full min-w-[820px] text-sm">
                   <thead>
-                    <tr className="border-b text-left font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                       <th scope="col" className="px-4 py-3 font-medium">Datum</th>
                       <th scope="col" className="px-4 py-3 font-medium">Produkt</th>
                       <th scope="col" className="px-4 py-3 font-medium">Land</th>
@@ -144,7 +144,7 @@ export default async function CalibrationPage() {
                   <tbody>
                     {outcomes.map((o) => (
                       <tr key={o.id} className="border-b border-border/60 last:border-0">
-                        <td className="px-4 py-3 font-mono text-xs">{formatWeek(o.droppedAt.toISOString().slice(0, 10))}</td>
+                        <td className="px-4 py-3 text-xs">{formatWeek(o.droppedAt.toISOString().slice(0, 10))}</td>
                         <td className="max-w-[320px] px-4 py-3">
                           {o.candidateSnapshot ? (
                             <Link href={`/produkt/${o.candidateSnapshot.id}`} className="line-clamp-1 hover:underline">
@@ -157,13 +157,13 @@ export default async function CalibrationPage() {
                           ) : (
                             <span className="line-clamp-1">{o.product.title}</span>
                           )}
-                          <span className="font-mono text-[11px] text-muted-foreground">{o.keyword}</span>
+                          <span className="text-xs text-muted-foreground">{o.keyword}</span>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">{o.country}</td>
+                        <td className="px-4 py-3 text-xs">{o.country}</td>
                         <td className="px-4 py-3">{o.verdict === "TOP" ? "Top" : o.verdict === "OK" ? "Okay" : "Flop"}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular">{o.unitsSold ?? "–"}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular">{o.row?.total != null ? formatNumber(o.row.total, 1) : "–"}</td>
-                        <td className="px-4 py-3 text-right font-mono text-xs tabular text-muted-foreground">
+                        <td className="px-4 py-3 text-right tabular">{o.unitsSold ?? "–"}</td>
+                        <td className="px-4 py-3 text-right tabular">{o.row?.total != null ? formatNumber(o.row.total, 1) : "–"}</td>
+                        <td className="px-4 py-3 text-right text-xs tabular text-muted-foreground">
                           {o.row
                             ? [o.row.trend, o.row.margin, o.row.competition].map((v) => (v === null ? "–" : formatNumber(v, 2))).join(" / ")
                             : "Snapshot gelöscht"}

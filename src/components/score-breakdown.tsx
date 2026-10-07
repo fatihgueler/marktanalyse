@@ -12,7 +12,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
         {label}
         {hint ? <span className="block text-[11px] text-subtle-foreground">{hint}</span> : null}
       </dt>
-      <dd className="whitespace-nowrap font-mono tabular">{value}</dd>
+      <dd className="whitespace-nowrap tabular">{value}</dd>
     </div>
   );
 }
@@ -95,7 +95,7 @@ export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: Candid
                   <span aria-hidden="true" className={cn("size-3 rounded-[3px]", part.className)} />
                   {part.label}
                 </h3>
-                <span className="text-right font-mono text-xs text-muted-foreground">
+                <span className="text-right text-xs text-muted-foreground">
                   <span className="block text-xl font-semibold text-foreground tabular">+{formatNumber(contribution, 1)}</span>
                   Punkte
                 </span>
@@ -103,7 +103,7 @@ export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: Candid
               <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
                 <div className={cn("h-full rounded-full", part.className)} style={{ width: `${partScore[part.key] * 100}%` }} />
               </div>
-              <p className="mb-2 font-mono text-xs text-muted-foreground">
+              <p className="mb-2 text-xs text-muted-foreground">
                 Teil-Score {formatNumber(partScore[part.key], 2)} × Gewicht {formatNumber(score.weights[part.key], 2)}
               </p>
               <dl className="text-sm">{details[part.key]}</dl>
@@ -111,7 +111,7 @@ export function ScoreBreakdown({ breakdown, supplierLabel }: { breakdown: Candid
           );
         })}
       </div>
-      <p className="rounded-lg border bg-card/60 px-4 py-3 font-mono text-xs leading-relaxed text-muted-foreground">
+      <p className="rounded-lg border bg-card/60 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
         Score = 100 × Relevanz {formatNumber(score.relevanceFactor, 2)} × ({formatNumber(score.weights.trend, 2)}·T{" "}
         {formatNumber(trend.score, 2)} + {formatNumber(score.weights.margin, 2)}·M {formatNumber(margin.score, 2)} +{" "}
         {formatNumber(score.weights.competition, 2)}·W {formatNumber(competition.score, 2)}) ={" "}

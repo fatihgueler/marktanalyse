@@ -20,3 +20,8 @@ export function formatDateTime(date: Date): string {
 export function formatWeek(isoDate: string): string {
   return new Intl.DateTimeFormat(LOCALE, { day: "2-digit", month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(isoDate));
 }
+
+/** Geldbetrag ohne Cent – für Karten, wo Cent nur Scheingenauigkeit wären. */
+export function formatMoneyRounded(value: number, currency: string): string {
+  return new Intl.NumberFormat(LOCALE, { style: "currency", currency, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(value);
+}

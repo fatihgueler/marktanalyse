@@ -71,7 +71,7 @@ export default async function MerklistePage() {
       <main id="inhalt" className="mx-auto grid max-w-[1400px] gap-6 px-4 pb-16 pt-8 sm:px-6">
         <section aria-labelledby="titel" className="flex flex-wrap items-end justify-between gap-4">
           <div className="grid gap-2">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Merkliste</p>
+            <p className="text-sm font-medium text-primary">Merkliste</p>
             <h1 id="titel" className="text-3xl font-bold tracking-tight">Von der Idee zum Drop</h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
               Jedes Produkt durchläuft Idee → Geprüft → Test-Drop → Ergebnis. Ergebnisse fließen in die Kalibrierung ein.

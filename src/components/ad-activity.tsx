@@ -21,13 +21,13 @@ function WeeklyBars({ weeks }: { weeks: AdsBreakdown["newAdsPerWeek"] }) {
         {weeks.map((w) => (
           <div key={w.weekStart} className="group relative flex-1">
             <div className="rounded-t-[3px] bg-series-competition/80 transition-colors group-hover:bg-series-competition" style={{ height: `${Math.max(2, (w.count / max) * BAR_HEIGHT)}px` }} />
-            <span className="pointer-events-none absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 font-mono text-[10px] group-hover:block">
+            <span className="pointer-events-none absolute -top-6 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-popover px-1.5 py-0.5 text-xs group-hover:block">
               {formatWeek(w.weekStart)}: {w.count}
             </span>
           </div>
         ))}
       </div>
-      <div className="flex justify-between font-mono text-[10px] text-subtle-foreground">
+      <div className="flex justify-between text-xs text-subtle-foreground">
         <span>{weeks[0] ? formatWeek(weeks[0].weekStart) : ""}</span>
         <span>{weeks.at(-1) ? formatWeek(weeks.at(-1)!.weekStart) : ""}</span>
       </div>
@@ -50,7 +50,7 @@ export function AdActivity({ ads, country }: { ads: AdsBreakdown | undefined; co
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
       <div className="grid content-start gap-4">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-3">
           {[
             { label: "Werbetreibende", value: `${ads.capped ? "≥ " : ""}${formatNumber(ads.advertisers ?? 0)}` },
             { label: "Aktive Anzeigen", value: `${ads.capped ? "≥ " : ""}${formatNumber(ads.activeAds)}` },
@@ -58,8 +58,8 @@ export function AdActivity({ ads, country }: { ads: AdsBreakdown | undefined; co
             { label: `Neue Anz. ${momentum.weeks} Wo.`, value: momentumLabel(momentum.growth, momentum.recent) },
           ].map((tile) => (
             <div key={tile.label} className="rounded-lg border bg-background/40 p-3">
-              <dt className="text-[11px] text-muted-foreground">{tile.label}</dt>
-              <dd className="mt-1 font-mono text-lg font-semibold tabular">{tile.value}</dd>
+              <dt className="text-xs text-muted-foreground">{tile.label}</dt>
+              <dd className="mt-1 text-base font-semibold tabular">{tile.value}</dd>
             </div>
           ))}
         </dl>
@@ -78,7 +78,7 @@ export function AdActivity({ ads, country }: { ads: AdsBreakdown | undefined; co
               <th scope="col" className="pb-1 text-right font-medium">Anzeigen</th>
             </tr>
           </thead>
-          <tbody className="font-mono tabular">
+          <tbody className="tabular">
             {ads.sources.map((s) => (
               <tr key={s.source} className="border-t border-border/60">
                 <td className="py-1.5 font-sans">{sourceLabel(s.source)}</td>
@@ -95,7 +95,7 @@ export function AdActivity({ ads, country }: { ads: AdsBreakdown | undefined; co
                 <span className="flex min-w-0 items-center gap-2">
                   <Megaphone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="truncate">{sample.advertiser}</span>
-                  <span className="shrink-0 font-mono text-subtle-foreground">seit {formatWeek(sample.startedAt)}</span>
+                  <span className="shrink-0 text-subtle-foreground">seit {formatWeek(sample.startedAt)}</span>
                 </span>
                 {sample.previewUrl ? (
                   <a href={sample.previewUrl} target="_blank" rel="noopener noreferrer" className="flex shrink-0 items-center gap-0.5 text-muted-foreground hover:text-foreground">

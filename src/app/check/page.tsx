@@ -36,7 +36,7 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
       <AppHeader active="check" />
       <main id="inhalt" className="mx-auto grid max-w-[1100px] gap-6 px-4 pb-16 pt-8 sm:px-6">
         <section aria-labelledby="titel" className="grid gap-2">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Produkt-Check</p>
+          <p className="text-sm font-medium text-primary">Produkt-Check</p>
           <h1 id="titel" className="text-3xl font-bold tracking-tight">{defaults.id ? `„${defaults.name}“ ändern` : "Rechnet sich das Produkt?"}</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Einkaufspreis und Zielland eintragen, der Radar rechnet mit Versand, Zoll, Einfuhrumsatzsteuer, Kleinunternehmerregelung und Gebühren.

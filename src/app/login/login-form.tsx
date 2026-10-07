@@ -25,7 +25,7 @@ export function LoginForm({ target }: { target: string }) {
           autoFocus
           aria-invalid={state.error ? true : undefined}
           aria-describedby={state.error ? "login-fehler" : undefined}
-          className="h-11 font-mono"
+          className="h-11"
         />
       </div>
       <p id="login-fehler" role="alert" aria-live="polite" className="min-h-5 text-sm text-destructive">

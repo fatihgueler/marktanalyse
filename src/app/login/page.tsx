@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="mb-8 flex items-center gap-3">
           <RadarMark />
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">nexana intern</p>
+            <p className="text-sm font-medium text-muted-foreground">nexana intern</p>
             <h1 className="text-2xl font-bold tracking-tight">Trend-Radar</h1>
           </div>
         </div>

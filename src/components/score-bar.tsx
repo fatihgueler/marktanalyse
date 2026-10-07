@@ -42,7 +42,7 @@ export function ScoreBar({ score, className }: { score: ScoreBreakdown; classNam
           )}
         </div>
       </TooltipTrigger>
-      <TooltipContent side="top" className="font-mono text-xs">
+      <TooltipContent side="top" className="text-xs">
         <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-0.5">
           {segments.map((s) => (
             <div key={s.key} className="contents">

@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, FlaskConical, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronDown, FlaskConical } from "lucide-react";
 import { AdActivity } from "@/components/ad-activity";
 import { AppHeader } from "@/components/app-header";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DropFeedbackForm } from "@/components/drop-feedback-form";
 import { MarginBreakdown } from "@/components/margin-breakdown";
+import { ProductImage, VERDICT_TONE, VerdictBadge } from "@/components/product-card";
 import { ResearchLinks } from "@/components/research-links";
 import { ScoreBar, ScoreLegend } from "@/components/score-bar";
 import { ScoreBreakdown } from "@/components/score-breakdown";
 import { ScoreHistoryChart } from "@/components/score-history-chart";
 import { TrendChart } from "@/components/trend-chart";
 import { radarConfig, type CategoryId, type Country } from "@/config/radar.config";
-import { formatDateTime, formatMoney, formatNumber, formatPercent, formatWeek } from "@/lib/format";
+import { formatDateTime, formatMoney, formatMoneyRounded, formatNumber, formatPercent, formatWeek } from "@/lib/format";
 import { demandMetric, judgeLabel, sourceLabel } from "@/lib/labels";
 import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
+import { shortTitle } from "@/lib/short-title";
+import { competitionLevel, rankingReason, rankingVerdict, trendSummary } from "@/scoring/ranking";
 import { deleteDrop } from "./drop-actions";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +28,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
   const candidate = await getCandidateDetail(id);
-  return { title: candidate ? `${candidate.keyword} · Trend-Radar` : "Nicht gefunden · Trend-Radar" };
+  return { title: candidate ? `${shortTitle(candidate.product.title)} · Trend-Radar` : "Nicht gefunden · Trend-Radar" };
 }
 
 /** Klartext-Zusammenfassung der wichtigsten Gründe – dieselben Zahlen wie in der Aufschlüsselung. */
@@ -74,6 +77,11 @@ export default async function ProductDetailPage({ params }: Params) {
     candidate.referencePriceSource === "config-multiplikator"
       ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping- oder eBay-Preise)`
       : `Median aus ${breakdown.referencePrice.sampleSize ?? "?"} Angeboten (${sourceLabel(candidate.referencePriceSource)})`;
+  const ranking = { trend: breakdown.trend, competition: breakdown.competition, total: candidate.totalScore, belowMinMargin: candidate.belowMinMargin };
+  const verdict = rankingVerdict(ranking);
+  const { margin } = breakdown;
+  const priceEstimated = candidate.referencePriceSource === "config-multiplikator";
+  const metric = demandMetric(candidate.demandSignal.source);
   const historyPoints = candidate.history.map((h) => ({
     // Uhrzeit mit anzeigen: Mehrere Läufe am selben Tag sollen unterscheidbar bleiben.
     label: new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(h.startedAt),
@@ -83,117 +91,175 @@ export default async function ProductDetailPage({ params }: Params) {
   return (
     <>
       <AppHeader />
-      <main id="inhalt" className="mx-auto grid max-w-[1200px] gap-10 px-4 pb-16 pt-6 sm:px-6">
+      <main id="inhalt" className="mx-auto grid max-w-[960px] gap-6 px-4 pb-16 pt-6 sm:px-6">
         <Link href="/" className="flex w-fit items-center gap-1.5 rounded text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft className="size-4" aria-hidden="true" />
           Zur Rangliste
         </Link>
 
-        <section aria-labelledby="produkt-titel" className="animate-rise grid gap-6 lg:grid-cols-[1fr_280px]">
-          <div className="grid content-start gap-3">
-            <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
-              <span className="rounded border bg-muted/60 px-1.5 py-0.5 text-foreground">{candidate.keyword}</span>
-              <span>via {sourceLabel(candidate.demandSignal.source)}{candidate.demandSignal.seedTerm?.startsWith("#") ? ` (${candidate.demandSignal.seedTerm})` : ""}</span>
-              <span aria-hidden="true">·</span>
-              <span>{radarConfig.countries[country].label}</span>
-              <span aria-hidden="true">·</span>
-              <span>{categoryLabel}</span>
+        <section aria-labelledby="produkt-titel" className="grid gap-5">
+          <div className="flex gap-4">
+            <ProductImage src={candidate.product.imageUrl} name={candidate.product.title} className="size-20 shrink-0 rounded-xl sm:size-28" />
+            <div className="grid min-w-0 content-start gap-1.5">
+              <h1 id="produkt-titel" className="text-2xl leading-tight font-bold tracking-tight sm:text-3xl">
+                {shortTitle(candidate.product.title)}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {radarConfig.countries[country].label} · {categoryLabel}
+              </p>
+              <p className="line-clamp-2 text-xs text-subtle-foreground" title={candidate.product.title}>
+                Originaltitel: {candidate.product.title}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                <a
+                  href={candidate.product.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded-md border bg-card px-2.5 py-1.5 font-medium transition hover:bg-accent active:scale-[0.98]"
+                >
+                  Auf {sourceLabel(candidate.product.source)} ansehen
+                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                  <span className="sr-only">(neuer Tab)</span>
+                </a>
+                {demoSources.length > 0 ? (
+                  <span className="flex items-center gap-1 rounded-md border border-status-warning/40 px-2.5 py-1.5 text-status-warning">
+                    <FlaskConical className="size-3.5" aria-hidden="true" />
+                    Demo-Daten: {demoSources.join(", ")}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <h1 id="produkt-titel" className="text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
-              {candidate.product.title}
-            </h1>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <a
-                href={candidate.product.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-md border px-2.5 py-1.5 font-medium transition hover:bg-accent active:scale-[0.98]"
-              >
-                Auf {sourceLabel(candidate.product.source)} ansehen
-                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                <span className="sr-only">(neuer Tab)</span>
-              </a>
-              {candidate.belowMinMargin ? (
-                <span className="flex items-center gap-1 rounded-md border border-status-warning/40 px-2.5 py-1.5 text-status-warning">
-                  <TriangleAlert className="size-3.5" aria-hidden="true" />
-                  Unter Mindestmarge
-                </span>
-              ) : null}
-              {demoSources.length > 0 ? (
-                <span className="flex items-center gap-1 rounded-md border border-status-warning/40 px-2.5 py-1.5 text-status-warning">
-                  <FlaskConical className="size-3.5" aria-hidden="true" />
-                  Demo-Daten: {demoSources.join(", ")}
-                </span>
-              ) : null}
-            </div>
-            <ul className="mt-2 grid gap-1.5 border-l-2 border-primary/60 pl-4 text-sm leading-relaxed text-foreground/90">
-              {summarize(candidate).map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
           </div>
 
-          <aside aria-label="Gesamtscore" className="rounded-xl border bg-card p-5">
-            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Gesamtscore</p>
-            <p className="my-2 font-mono text-6xl font-semibold leading-none tracking-tight tabular">{formatNumber(candidate.totalScore, 1)}</p>
-            <ScoreBar score={breakdown.score} className="mb-3 h-2.5" />
-            <ScoreLegend />
-            <dl className="mt-4 grid gap-1 border-t pt-3 text-xs">
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">Match-Relevanz</dt>
-                <dd className="font-mono tabular">{formatPercent(candidate.relevance)}</dd>
+          <div aria-label="Antwort" className="grid gap-4 rounded-xl border bg-card p-4 sm:p-6">
+            <div className="grid gap-2">
+              <VerdictBadge label={verdict} tone={VERDICT_TONE[verdict]} className="w-fit px-3 py-1 text-base" />
+              <p className="text-base leading-relaxed">{rankingReason(ranking)}</p>
+            </div>
+            <dl className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-muted/60 p-3">
+                <dt className="text-sm text-muted-foreground">Kaufen für</dt>
+                <dd className="text-2xl font-semibold tabular">{formatMoneyRounded(margin.purchase, margin.currency)}</dd>
+                <dd className="text-xs text-muted-foreground">mit Versand, Zoll &amp; Steuern {formatMoneyRounded(margin.landedCost, margin.currency)}</dd>
               </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">Bewertet durch</dt>
-                <dd className="text-right">{judgeLabel(candidate.matchJudge)}</dd>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <dt className="text-sm text-muted-foreground">Verkaufen für</dt>
+                <dd className="text-2xl font-semibold tabular">{formatMoneyRounded(margin.referencePrice, margin.currency)}</dd>
+                <dd className="text-xs text-muted-foreground">{priceEstimated ? "geschätzt – kein Marktpreis gefunden" : "üblicher Marktpreis"}</dd>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <dt className="text-sm text-muted-foreground">Bleibt pro Stück</dt>
+                <dd className={`text-2xl font-semibold tabular ${candidate.belowMinMargin ? "text-status-critical" : "text-status-good"}`}>
+                  {formatMoneyRounded(margin.marginAbs, margin.currency)}
+                </dd>
+                <dd className="text-xs text-muted-foreground">{formatPercent(margin.marginPct)} vom Nettoerlös</dd>
               </div>
             </dl>
-            <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">„{candidate.matchReason}“</p>
-          </aside>
+            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <div className="flex gap-1.5">
+                <dt className="text-muted-foreground">Trend:</dt>
+                <dd className="font-medium">{trendSummary(breakdown.trend)}</dd>
+              </div>
+              <div className="flex gap-1.5">
+                <dt className="text-muted-foreground">Konkurrenz:</dt>
+                <dd className="font-medium">{competitionLevel(breakdown.competition)}</dd>
+              </div>
+            </dl>
+          </div>
         </section>
+
+        <section aria-labelledby="trend-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
+          <div className="grid gap-0.5">
+            <h2 id="trend-titel" className="text-lg font-semibold">
+              {metric.label} „{candidate.keyword}“ · {country}
+            </h2>
+            <p className="text-xs text-muted-foreground">{metric.note}</p>
+          </div>
+          <TrendChart series={candidate.series} metricLabel={metric.label} recentWeeks={radarConfig.trend.recentWeeks} previousWeeks={radarConfig.trend.previousWeeks} />
+        </section>
+
+        <section aria-labelledby="verlauf-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
+          <h2 id="verlauf-titel" className="text-lg font-semibold">Bewertung über alle Läufe</h2>
+          {historyPoints.length >= 2 ? (
+            <ScoreHistoryChart points={historyPoints} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Erst ein Lauf vorhanden – der Verlauf erscheint ab dem zweiten Lauf.</p>
+          )}
+        </section>
+
+        <details className="group rounded-xl border bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+            <span className="grid gap-0.5">
+              <span className="font-display text-lg font-semibold">Technische Aufschlüsselung</span>
+              <span className="text-sm text-muted-foreground">Score, Rechenweg der Marge, Datenquellen</span>
+            </span>
+            <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <div className="grid gap-8 border-t p-4 sm:p-5">
+            <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
+              <ul className="grid content-start gap-1.5 border-l-2 border-primary/60 pl-4 text-sm leading-relaxed">
+                {summarize(candidate).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <div className="rounded-lg border p-4">
+                <p className="text-sm text-muted-foreground">Gesamtscore</p>
+                <p className="my-1 text-4xl leading-none font-semibold tabular">{formatNumber(candidate.totalScore, 1)}</p>
+                <ScoreBar score={breakdown.score} className="my-3 h-2.5" />
+                <ScoreLegend />
+                <dl className="mt-4 grid gap-1 border-t pt-3 text-xs">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Match-Relevanz</dt>
+                    <dd className="tabular">{formatPercent(candidate.relevance)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Bewertet durch</dt>
+                    <dd className="text-right">{judgeLabel(candidate.matchJudge)}</dd>
+                  </div>
+                </dl>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground italic">„{candidate.matchReason}“</p>
+              </div>
+            </div>
+            <div className="grid gap-3">
+              <h3 className="text-base font-semibold">Score-Aufschlüsselung</h3>
+              <ScoreBreakdown breakdown={breakdown} supplierLabel={sourceLabel(candidate.product.source)} />
+            </div>
+            <div className="grid gap-3">
+              <h3 className="text-base font-semibold">Kalkulation</h3>
+              <MarginBreakdown margin={breakdown.margin} referenceSourceLabel={referenceSourceLabel} />
+            </div>
+            <div className="grid gap-1 text-xs text-subtle-foreground">
+              <p>
+                Nachfrage: {sourceLabel(candidate.demandSignal.source)}
+                {candidate.demandSignal.seedTerm?.startsWith("#") ? ` (${candidate.demandSignal.seedTerm})` : ""}, abgerufen {formatDateTime(candidate.demandSignal.fetchedAt)}
+                {candidate.demandSignal.source === "tiktok-trends" ? " über Scraping-Dienst" : ""}
+              </p>
+              <p>Angebot abgerufen: {formatDateTime(candidate.supplyOffer.fetchedAt)} ({sourceLabel(candidate.product.source)}, Produkt-ID {candidate.product.externalId})</p>
+              {candidate.referencePriceMeta ? <p>Referenzpreis abgerufen: {formatDateTime(candidate.referencePriceMeta.fetchedAt)}</p> : null}
+              <p>
+                Wechselkurse:{" "}
+                {breakdown.fx?.source === "ezb" && breakdown.fx.date
+                  ? `EZB-Referenzkurse vom ${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${breakdown.fx.date}T00:00:00Z`))}`
+                  : "feste Werte aus der Config"}
+              </p>
+              <p>
+                Lauf {candidate.runId} vom {formatDateTime(candidate.run.startedAt)} · Config-Version {candidate.run.configVersion}
+              </p>
+            </div>
+          </div>
+        </details>
 
         <section aria-labelledby="recherche-titel" className="grid gap-3">
           <h2 id="recherche-titel" className="text-lg font-semibold">Recherche zu „{candidate.keyword}“</h2>
           <ResearchLinks name={candidate.keyword} country={country} />
         </section>
 
-        <section aria-labelledby="warum-titel" className="grid gap-4">
-          <h2 id="warum-titel" className="text-lg font-semibold">Warum steht es hier? Score-Aufschlüsselung</h2>
-          <ScoreBreakdown breakdown={breakdown} supplierLabel={sourceLabel(candidate.product.source)} />
-        </section>
-
-        <section aria-labelledby="trend-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="trend-titel" className="text-lg font-semibold">
-              {demandMetric(candidate.demandSignal.source).label} „{candidate.keyword}“ · {country}
-            </h2>
-            <p className="text-xs text-muted-foreground">{demandMetric(candidate.demandSignal.source).note}</p>
-          </div>
-          <TrendChart
-            series={candidate.series}
-            metricLabel={demandMetric(candidate.demandSignal.source).label} recentWeeks={radarConfig.trend.recentWeeks} previousWeeks={radarConfig.trend.previousWeeks} />
-        </section>
-
         <section aria-labelledby="werbung-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="grid gap-0.5">
             <h2 id="werbung-titel" className="text-lg font-semibold">Werbeaktivität · {country}</h2>
             <p className="text-xs text-muted-foreground">Meta Ad Library &amp; TikTok Ad Library, aktive Anzeigen zum Keyword</p>
           </div>
           <AdActivity ads={breakdown.ads} country={country} />
-        </section>
-
-        <section aria-labelledby="marge-block-titel" className="grid gap-4">
-          <h2 id="marge-block-titel" className="text-lg font-semibold">Kalkulation</h2>
-          <MarginBreakdown margin={breakdown.margin} referenceSourceLabel={referenceSourceLabel} />
-        </section>
-
-        <section aria-labelledby="verlauf-titel" className="grid gap-3 rounded-xl border bg-card p-4 sm:p-5">
-          <h2 id="verlauf-titel" className="text-lg font-semibold">Score-Verlauf über alle Läufe</h2>
-          {historyPoints.length >= 2 ? (
-            <ScoreHistoryChart points={historyPoints} />
-          ) : (
-            <p className="text-sm text-muted-foreground">Erst ein Lauf vorhanden – der Verlauf erscheint ab dem zweiten Lauf.</p>
-          )}
         </section>
 
         <section aria-labelledby="drop-titel" className="grid gap-4 rounded-xl border bg-card p-4 sm:p-5">
@@ -213,9 +279,9 @@ export default async function ProductDetailPage({ params }: Params) {
                 <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background/40 px-3 py-2 text-sm">
                   <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="font-semibold">{o.verdict === "TOP" ? "Top" : o.verdict === "OK" ? "Okay" : "Flop"}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{formatWeek(o.droppedAt.toISOString().slice(0, 10))}</span>
-                    {o.unitsSold !== null ? <span className="font-mono text-xs">{formatNumber(o.unitsSold)} Stück</span> : null}
-                    {o.returnRate !== null ? <span className="font-mono text-xs">{formatPercent(o.returnRate, 1)} Retouren</span> : null}
+                    <span className="text-xs text-muted-foreground tabular">{formatWeek(o.droppedAt.toISOString().slice(0, 10))}</span>
+                    {o.unitsSold !== null ? <span className="text-xs tabular">{formatNumber(o.unitsSold)} Stück</span> : null}
+                    {o.returnRate !== null ? <span className="text-xs tabular">{formatPercent(o.returnRate, 1)} Retouren</span> : null}
                     {o.note ? <span className="text-xs text-muted-foreground">„{o.note}“</span> : null}
                   </span>
                   <form action={deleteDrop}>
@@ -235,23 +301,6 @@ export default async function ProductDetailPage({ params }: Params) {
           <DropFeedbackForm candidateSnapshotId={candidate.id} today={today} />
         </section>
 
-        <footer className="grid gap-1 border-t pt-4 font-mono text-[11px] text-subtle-foreground">
-          <p>
-            Nachfrage abgerufen: {formatDateTime(candidate.demandSignal.fetchedAt)} ({sourceLabel(candidate.demandSignal.source)}
-            {candidate.demandSignal.source === "tiktok-trends" ? ", über Scraping-Dienst" : ""})
-          </p>
-          <p>Angebot abgerufen: {formatDateTime(candidate.supplyOffer.fetchedAt)} ({sourceLabel(candidate.product.source)}, Produkt-ID {candidate.product.externalId})</p>
-          {candidate.referencePriceMeta ? <p>Referenzpreis abgerufen: {formatDateTime(candidate.referencePriceMeta.fetchedAt)}</p> : null}
-          <p>
-            Wechselkurse:{" "}
-            {breakdown.fx?.source === "ezb" && breakdown.fx.date
-              ? `EZB-Referenzkurse vom ${new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${breakdown.fx.date}T00:00:00Z`))}`
-              : "feste Werte aus der Config"}
-          </p>
-          <p>
-            Lauf {candidate.runId} vom {formatDateTime(candidate.run.startedAt)} · Config-Version {candidate.run.configVersion}
-          </p>
-        </footer>
       </main>
     </>
   );

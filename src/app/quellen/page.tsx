@@ -43,7 +43,7 @@ function ModeBadge({ mode }: { mode: string | undefined }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px]",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
         live ? "border-primary/40 text-foreground" : off ? "border-border text-muted-foreground" : "border-status-warning/40 text-status-warning",
       )}
     >
@@ -68,7 +68,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
       <AppHeader active="quellen" />
       <main id="inhalt" className="mx-auto grid max-w-[1100px] gap-8 px-4 pb-16 pt-8 sm:px-6">
         <section aria-labelledby="titel" className="animate-rise grid gap-2">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Quellen</p>
+          <p className="text-sm font-medium text-primary">Quellen</p>
           <h1 id="titel" className="text-3xl font-bold tracking-tight">Woher die Daten kommen</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Status aus dem letzten Lauf{run ? ` (${formatDateTime(run.startedAt)})` : ""}. Zugänge tragt ihr in Railway unter „Variables“ ein, beim Web-Service und beim Service
@@ -79,7 +79,7 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
         <div className="overflow-x-auto rounded-xl border bg-card">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
-              <tr className="border-b text-left font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                 <th scope="col" className="px-4 py-3 font-medium">Quelle</th>
                 <th scope="col" className="px-4 py-3 font-medium">Status</th>
                 <th scope="col" className="px-4 py-3 font-medium">Railway-Variablen</th>
@@ -91,13 +91,13 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
                 <tr key={source.id} className="border-b border-border/60 last:border-0">
                   <th scope="row" className="px-4 py-3 text-left font-medium">
                     {sourceLabel(source.id)}
-                    {source.required ? <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.12em] text-primary">Pflicht</span> : null}
+                    {source.required ? <span className="ml-2 text-xs font-medium text-primary">Pflicht</span> : null}
                     <span className="block text-[11px] font-normal text-subtle-foreground">{source.role}</span>
                   </th>
                   <td className="px-4 py-3">
                     <ModeBadge mode={modes[source.id]} />
                   </td>
-                  <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{source.vars}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{source.vars}</td>
                   <td className="px-4 py-3 text-muted-foreground">{source.cost}</td>
                 </tr>
               ))}
