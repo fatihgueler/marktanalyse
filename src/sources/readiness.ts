@@ -20,10 +20,8 @@ export function mixedModeWarnings(modes: Record<string, RunSourceMode>): string[
   if (anySupplyLive && !anyTrendLive) {
     warnings.push("Angebote sind live, aber keine Trendquelle – es entstehen keine Kandidaten. SERPAPI_API_KEY oder Pinterest-Zugang setzen.");
   }
-  if (!live("google-shopping") && !live("ebay")) {
-    warnings.push("Keine echten Verkaufspreise – Margen sind nur per Kategorie-Faktor geschätzt. eBay-Keys (kostenlos) oder SERPAPI_API_KEY setzen.");
-  } else if (!live("ebay")) {
-    warnings.push("Ohne eBay fehlen der Wettbewerb im Zielland und echte Preise für die meisten Keywords. EBAY_CLIENT_ID/SECRET setzen (kostenlos).");
+  if (!live("google-shopping")) {
+    warnings.push("Keine echten Verkaufspreise – Margen sind nur per Kategorie-Faktor geschätzt. SERPAPI_API_KEY setzen.");
   }
   if (!live("claude")) {
     warnings.push("Matching läuft ohne Claude (Heuristik) – mehr Fehlzuordnungen; 1688 wird ohne Übersetzung übersprungen. ANTHROPIC_API_KEY empfohlen.");

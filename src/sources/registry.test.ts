@@ -9,7 +9,6 @@ describe("createSources", () => {
     const sources = createSources(env({}));
     expect(sources.disabled).toEqual([]);
     expect(sources.trend.every((s) => s.mode === "mock")).toBe(true);
-    expect(sources.market?.mode).toBe("mock");
   });
 
   it("schaltet im Echtbetrieb alle Demo-Quellen ab, damit keine erfundenen Daten in die Rangliste geraten", () => {
@@ -19,18 +18,16 @@ describe("createSources", () => {
     expect(sources.trend.map((s) => s.id)).toEqual(["google-trends"]);
     expect(sources.supply.map((s) => s.id)).toEqual(["aliexpress"]);
     expect(sources.price?.mode).toBe("live");
-    expect(sources.market).toBeNull();
     expect(sources.ads).toEqual([]);
-    expect(sources.disabled).toEqual(expect.arrayContaining(["tiktok-trends", "pinterest-trends", "alibaba-1688", "ebay", "meta-ad-library", "tiktok-ads"]));
+    expect(sources.disabled).toEqual(expect.arrayContaining(["tiktok-trends", "pinterest-trends", "alibaba-1688", "meta-ad-library", "tiktok-ads"]));
 
     const modes = describeModes(sources, "live");
-    expect(modes).toMatchObject({ "google-trends": "live", ebay: "off", "meta-ad-library": "off", claude: "live" });
+    expect(modes).toMatchObject({ "google-trends": "live", "pinterest-trends": "off", "meta-ad-library": "off", claude: "live" });
   });
 
-  it("nimmt Pinterest und eBay live, sobald ihre Zugangsdaten gesetzt sind", () => {
-    const sources = createSources(env({ PINTEREST_ACCESS_TOKEN: "p", EBAY_CLIENT_ID: "e", EBAY_CLIENT_SECRET: "s" }));
+  it("nimmt Pinterest live, sobald die Zugangsdaten gesetzt sind", () => {
+    const sources = createSources(env({ PINTEREST_ACCESS_TOKEN: "p" }));
     expect(sources.trend.map((s) => s.id)).toEqual(["pinterest-trends"]);
-    expect(sources.market?.mode).toBe("live");
     expect(sources.pinterestAuth).not.toBeNull();
   });
 });

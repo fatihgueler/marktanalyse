@@ -122,26 +122,6 @@ export interface PriceSource extends SourceBase {
   referencePrice(keyword: string, country: Country): Promise<PriceRecord | null>;
 }
 
-// ── Marktplatz im Zielland (eBay) ───────────────────────────────────────
-
-export interface MarketRecord extends SourceRecord {
-  keyword: string;
-  /** Neuware-Angebote zum Festpreis auf dem Marktplatz des Landes (Gesamtzahl laut API) */
-  totalListings: number;
-  /** Anteil der Stichprobe mit Versand aus Asien (0..1); null ohne Stichprobe */
-  asiaShare: number | null;
-  /** Median-Preis der Angebote mit Versand außerhalb Asiens; null bei zu kleiner Stichprobe */
-  price: PriceRecord | null;
-}
-
-/**
- * Marktplätze im Zielland liefern zwei Dinge auf einmal: wie verbreitet ein Produkt dort schon ist
- * (Wettbewerb) und was Kunden dafür zahlen (zweiter Referenzpreis neben Google Shopping).
- */
-export interface MarketSource extends SourceBase {
-  marketActivity(keyword: string, country: Country): Promise<MarketRecord>;
-}
-
 // ── Werbeaktivität (Phase 2) ─────────────────────────────────────────────
 
 export interface AdSample {

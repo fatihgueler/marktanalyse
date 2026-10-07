@@ -28,7 +28,7 @@ import { quotaDecision } from "@/sources/budget";
 import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
-import type { AdRecord, DemandRecord, MarketRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
+import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
 loadDotenv({ quiet: true });
 
@@ -97,9 +97,6 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   }
   if (modes.claude === "live") {
     lines.push(`Claude (${readCollectEnv().ANTHROPIC_MODEL}): bis zu ${countries * maxKeywordsPerCountry} Requests (abzüglich Cache)`);
-  }
-  if (modes.ebay === "live") {
-    lines.push(`eBay Browse API: bis zu ${countries * maxKeywordsPerCountry} Suchen (kostenlos, 5.000 je Tag)`);
   }
   if (modes["pinterest-trends"] === "live") {
     const regions = new Set(COUNTRIES.map((c) => radarConfig.countries[c].pinterestRegion)).size;
@@ -251,20 +248,6 @@ async function fetchReferencePrice(ctx: RunContext, keyword: string, country: Co
   }
 }
 
-/** eBay im Zielland: Angebotszahl (Wettbewerb) und ggf. Median-Preis, der als Referenzpreis gespeichert wird. */
-async function fetchMarket(ctx: RunContext, keyword: string, country: Country): Promise<MarketRecord | null> {
-  const source = ctx.sources.market;
-  if (!source) return null;
-  try {
-    const record = await source.marketActivity(keyword, country);
-    if (record.price) await storeReferencePrice(ctx, record.price, keyword, country);
-    return record;
-  } catch (error) {
-    ctx.errors.push({ source: source.id, country, keyword, message: errorMessage(error) });
-    return null;
-  }
-}
-
 async function fetchAdSignals(ctx: RunContext, keyword: string, country: Country): Promise<AdRecord[]> {
   const results = await Promise.all(
     ctx.sources.ads.map(async (source) => {
@@ -321,17 +304,14 @@ async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Co
   const bySource = await searchAllSupply(ctx, keyword, country, allowed);
   if (bySource.length === 0) return;
 
-  const [shopping, market, adRecords] = await Promise.all([
+  const [reference, adRecords] = await Promise.all([
     allowed.price ? fetchReferencePrice(ctx, keyword, country) : Promise.resolve(null),
-    fetchMarket(ctx, keyword, country),
     fetchAdSignals(ctx, keyword, country),
   ]);
-  // Google Shopping (breiter Querschnitt aller Shops) vor eBay, eBay vor dem Kategorie-Faktor.
-  const reference = shopping ?? market?.price ?? null;
   const ads = combineAdSignals(adRecords);
   for (const { offers } of bySource) {
     ctx.stats.offers += offers.length;
-    await processOffers(ctx, offers, demand, country, reference, market, ads);
+    await processOffers(ctx, offers, demand, country, reference, ads);
   }
 }
 
@@ -341,7 +321,6 @@ async function processOffers(
   demand: ScoredDemand,
   country: Country,
   reference: PriceRecord | null,
-  market: MarketRecord | null,
   ads: ReturnType<typeof combineAdSignals>,
 ): Promise<void> {
   const keyword = demand.record.keyword;
@@ -366,7 +345,6 @@ async function processOffers(
       resultCount: offers[0]?.resultCount ?? null,
       orders30dSum: orders.length > 0 ? orders.reduce((a, b) => a + b, 0) : null,
       advertisers: ads.advertisers,
-      marketplaceListings: market?.totalListings ?? null,
     },
     ctx.config.competition,
   );
@@ -423,7 +401,6 @@ async function processOffers(
         originalCurrency: referenceCurrency,
       },
       ads,
-      market: market ? { source: market.source, totalListings: market.totalListings, asiaShare: market.asiaShare } : undefined,
       fx: { source: ctx.fx.source, date: ctx.fx.date },
     };
 

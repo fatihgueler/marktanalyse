@@ -48,16 +48,12 @@ function summarize(candidate: CandidateDetail): string[] {
   const level = competition.score >= 0.5 ? "überschaubar" : "bereits hoch";
   const ads = candidate.breakdown.ads;
   const supplier = sourceLabel(candidate.product.source);
-  const market = candidate.breakdown.market;
   const offersText = competition.resultCount !== null ? `${formatNumber(competition.resultCount)} Angebote auf ${supplier}` : null;
-  const marketText = market
-    ? `${formatNumber(market.totalListings)} auf eBay im Land${market.asiaShare !== null ? ` (${formatPercent(market.asiaShare)} mit Versand aus Asien)` : ""}`
-    : null;
   if (ads?.covered) {
-    const parts = [`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür`, marketText, offersText].filter(Boolean);
+    const parts = [`${formatNumber(ads.advertisers ?? 0)} Shops werben im Land bereits dafür`, offersText].filter(Boolean);
     lines.push(`${parts.join(", ")} – Wettbewerb ${level}.`);
-  } else if (offersText || marketText) {
-    lines.push(`${[marketText, offersText].filter(Boolean).join(", ")} – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
+  } else if (offersText) {
+    lines.push(`${offersText} – Wettbewerb ${level} (keine Werbedaten für dieses Land).`);
   }
   return lines;
 }
@@ -75,7 +71,7 @@ export default async function ProductDetailPage({ params }: Params) {
   const demoSources = Object.entries(candidate.sourceModes).filter(([, mode]) => mode === "mock").map(([s]) => sourceLabel(s));
   const referenceSourceLabel =
     candidate.referencePriceSource === "config-multiplikator"
-      ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping- oder eBay-Preise)`
+      ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping-Preise)`
       : `Median aus ${breakdown.referencePrice.sampleSize ?? "?"} Angeboten (${sourceLabel(candidate.referencePriceSource)})`;
   const ranking = { trend: breakdown.trend, competition: breakdown.competition, total: candidate.totalScore, belowMinMargin: candidate.belowMinMargin };
   const verdict = rankingVerdict(ranking);

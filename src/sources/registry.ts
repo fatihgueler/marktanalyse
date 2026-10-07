@@ -5,7 +5,7 @@
  * Werbebibliotheken (Meta, TikTok) implementieren `AdSignalSource`.
  * Phase 2b: TikTok Creative Center (`TrendSource`) und 1688 (`SupplySource`) laufen über den
  * Scraping-Dienst Apify (APIFY_TOKEN) – bewusste Entscheidung des Auftraggebers, siehe PLAN-PHASE2.md §9.
- * Kostenlose Zusatzquellen: Pinterest Trends (`TrendSource`) und eBay (`MarketSource`).
+ * Kostenlose Zusatzquelle: Pinterest Trends (`TrendSource`).
  */
 import { perRunBudget } from "@/config/config-check";
 import type { CollectEnv } from "@/lib/env";
@@ -23,13 +23,11 @@ import { GoogleTrendsMockSource } from "./demand/google-trends.mock";
 import { GoogleTrendsSerpApiSource } from "./demand/google-trends.serpapi";
 import { PinterestAuth, PinterestTrendsSource } from "./demand/pinterest-trends";
 import { PinterestTrendsMockSource } from "./demand/pinterest-trends.mock";
-import { EbaySource } from "./market/ebay";
-import { EbayMockSource } from "./market/ebay.mock";
 import { GoogleShoppingMockSource } from "./price/google-shopping.mock";
 import { GoogleShoppingSerpApiSource } from "./price/google-shopping.serpapi";
 import { AliExpressSource } from "./supply/aliexpress";
 import { AliExpressMockSource } from "./supply/aliexpress.mock";
-import type { AdSignalSource, MarketSource, PriceSource, RunSourceMode, SourceMode, SupplySource, TokenStore, TrendSource } from "./types";
+import type { AdSignalSource, PriceSource, RunSourceMode, SourceMode, SupplySource, TokenStore, TrendSource } from "./types";
 
 /** Mock: TikTok zeigt für Produkt-Keywords weniger Werbetreibende als Meta. Nur für Demo-Daten. */
 const MOCK_TIKTOK_FACTOR = 0.6;
@@ -39,10 +37,8 @@ export interface SourceSet {
   serpApiBudget: SearchBudget | null;
   trend: TrendSource[];
   supply: SupplySource[];
-  /** null = im Echtbetrieb abgeschaltet (kein Key) → Kategorie-Faktor bzw. eBay-Preis */
+  /** null = im Echtbetrieb abgeschaltet (kein Key) → Kategorie-Faktor */
   price: PriceSource | null;
-  /** null = im Echtbetrieb abgeschaltet → Marktplatz-Wettbewerb neutral, kein eBay-Preis */
-  market: MarketSource | null;
   ads: AdSignalSource[];
   /** Demo-Quellen, die im Echtbetrieb nicht mitlaufen (IDs) */
   disabled: string[];
@@ -84,9 +80,6 @@ export function createSources(env: CollectEnv, now: Date = new Date(), tokenStor
   const price: PriceSource =
     env.SERPAPI_API_KEY && serpApiBudget ? new GoogleShoppingSerpApiSource(env.SERPAPI_API_KEY, serpApiBudget) : new GoogleShoppingMockSource();
 
-  const market: MarketSource =
-    env.EBAY_CLIENT_ID && env.EBAY_CLIENT_SECRET ? new EbaySource(env.EBAY_CLIENT_ID, env.EBAY_CLIENT_SECRET) : new EbayMockSource();
-
   const ads: AdSignalSource[] = [
     env.META_ACCESS_TOKEN
       ? new MetaAdLibrarySource(env.META_ACCESS_TOKEN)
@@ -100,13 +93,12 @@ export function createSources(env: CollectEnv, now: Date = new Date(), tokenStor
   // sich erfundene Keywords, Preise und Werbezahlen in echte Ergebnisse. Fehlende Signale zählen neutral.
   const liveOperation = [...trend, ...supply].some((source) => source.mode === "live");
   const keep = (source: { mode: SourceMode }) => !liveOperation || source.mode === "live";
-  const all = [...trend, ...supply, price, market, ...ads];
+  const all = [...trend, ...supply, price, ...ads];
   return {
     serpApiBudget,
     trend: trend.filter(keep),
     supply: supply.filter(keep),
     price: keep(price) ? price : null,
-    market: keep(market) ? market : null,
     ads: ads.filter(keep),
     disabled: all.filter((source) => !keep(source)).map((source) => source.id),
     pinterestAuth,
@@ -116,7 +108,7 @@ export function createSources(env: CollectEnv, now: Date = new Date(), tokenStor
 /** Übersicht „Quelle → Modus“, wird pro Lauf gespeichert und im Dashboard angezeigt. */
 export function describeModes(sources: SourceSet, judgeMode: SourceMode): Record<string, RunSourceMode> {
   const modes: Record<string, RunSourceMode> = {};
-  const active = [...sources.trend, ...sources.supply, sources.price, sources.market, ...sources.ads].filter((s) => s !== null);
+  const active = [...sources.trend, ...sources.supply, sources.price, ...sources.ads].filter((s) => s !== null);
   for (const source of active) modes[source.id] = source.mode;
   for (const id of sources.disabled) modes[id] = "off";
   modes.claude = judgeMode;

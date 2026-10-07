@@ -51,8 +51,6 @@ export interface CandidateBreakdown {
   referencePrice: { source: string; sampleSize: number | null; originalPrice: number; originalCurrency: string };
   /** Werbeaktivität (Phase 2); fehlt bei Snapshots aus Läufen vor Phase 2 */
   ads?: AdsBreakdown;
-  /** eBay im Zielland; fehlt ohne eBay-Daten und bei älteren Snapshots */
-  market?: { source: string; totalListings: number; asiaShare: number | null };
   /** Wechselkurse des Laufs; fehlt bei älteren Snapshots (dort feste Kurse) */
   fx?: { source: "ezb" | "config"; date: string | null };
 }

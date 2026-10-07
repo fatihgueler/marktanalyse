@@ -37,8 +37,6 @@ export interface CountryProfile {
   /** AliExpress-Parameter */
   aliexpressShipTo: string;
   aliexpressLanguage: string;
-  /** eBay-Marktplatz (Header X-EBAY-C-MARKETPLACE-ID) */
-  ebayMarketplace: string;
   /** Pinterest-Trends-Region; kleinere Märkte gibt es nur zusammengefasst */
   pinterestRegion: string;
 }
@@ -86,10 +84,10 @@ export interface CategoryConfig {
 export const radarConfig = {
   countries: {
     // ANNAHME: Pinterest führt AT und CH nur als Region „DE+AT+CH“ – beide Länder teilen sich diese Trends.
-    DE: { label: "Deutschland", currency: "EUR", serpGeo: "DE", serpLanguage: "de", aliexpressShipTo: "DE", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_DE", pinterestRegion: "DE" },
-    AT: { label: "Österreich", currency: "EUR", serpGeo: "AT", serpLanguage: "de", aliexpressShipTo: "AT", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_AT", pinterestRegion: "DE+AT+CH" },
-    CH: { label: "Schweiz", currency: "CHF", serpGeo: "CH", serpLanguage: "de", aliexpressShipTo: "CH", aliexpressLanguage: "DE", ebayMarketplace: "EBAY_CH", pinterestRegion: "DE+AT+CH" },
-    GB: { label: "Vereinigtes Königreich", currency: "GBP", serpGeo: "GB", serpLanguage: "en", aliexpressShipTo: "UK", aliexpressLanguage: "EN", ebayMarketplace: "EBAY_GB", pinterestRegion: "GB+IE" },
+    DE: { label: "Deutschland", currency: "EUR", serpGeo: "DE", serpLanguage: "de", aliexpressShipTo: "DE", aliexpressLanguage: "DE", pinterestRegion: "DE" },
+    AT: { label: "Österreich", currency: "EUR", serpGeo: "AT", serpLanguage: "de", aliexpressShipTo: "AT", aliexpressLanguage: "DE", pinterestRegion: "DE+AT+CH" },
+    CH: { label: "Schweiz", currency: "CHF", serpGeo: "CH", serpLanguage: "de", aliexpressShipTo: "CH", aliexpressLanguage: "DE", pinterestRegion: "DE+AT+CH" },
+    GB: { label: "Vereinigtes Königreich", currency: "GBP", serpGeo: "GB", serpLanguage: "en", aliexpressShipTo: "UK", aliexpressLanguage: "EN", pinterestRegion: "GB+IE" },
   } satisfies Record<Country, CountryProfile>,
 
   /**
@@ -343,24 +341,6 @@ export const radarConfig = {
   },
 
   /**
-   * eBay Browse API (kostenlos, 5.000 Aufrufe/Tag, Client-Credentials): je Keyword und Land eine Suche
-   * nach Neuware zum Festpreis. Liefert die Angebotszahl (Wettbewerb) und einen zweiten Referenzpreis,
-   * der für alle Keywords greift, die keinen Google-Shopping-Preis bekommen.
-   */
-  marketplace: {
-    /** Angebote in der Stichprobe (API-Maximum 200) */
-    sampleSize: 100,
-    /** Versandorte, die als Direktversand aus Asien gelten – andere Dropshipper mit derselben Quelle */
-    asiaLocations: ["CN", "HK"],
-    /**
-     * Mindestzahl Angebote mit Versand außerhalb Asiens für einen Median-Preis.
-     * ANNAHME: Asien-Direktversand wird aus dem Preis herausgerechnet, weil er nicht zeigt, was Kunden
-     * bei einem Shop mit Lager in Europa zahlen.
-     */
-    minPriceSamples: 5,
-  },
-
-  /**
    * Pinterest Trends API (kostenlos, App-Freigabe nötig): steigende Suchbegriffe je Region mit Wochenkurve.
    * Stark bei Wohnen, Deko und Geschenken; oft früher als Google.
    */
@@ -407,14 +387,8 @@ export const radarConfig = {
      * ANNAHME: Ab ~100 aktiven Werbetreibenden für einen Suchbegriff ist der Markt gesättigt.
      */
     advertisersLogCap: 2,
-    /**
-     * log10(1 + eBay-Angebote im Zielland), bei dem die Marktplatz-Sättigung 1 erreicht (4 ≈ 10.000 Angebote).
-     * ANNAHME: Ab ~10.000 Neuware-Angeboten auf eBay ist ein Produkt im Zielland Massenware.
-     */
-    marketplaceLogCap: 4,
-    // ANNAHME: Werbedruck ist der direkteste Beleg für westliche Konkurrenz und zählt daher am meisten,
-    // danach das Angebot auf eBay im Zielland; AliExpress zeigt nur die Verfügbarkeit in China.
-    weights: { results: 0.15, orders: 0.2, marketplace: 0.25, advertisers: 0.4 },
+    // ANNAHME: Werbedruck ist der direkteste Beleg für westliche Konkurrenz und zählt daher am meisten.
+    weights: { results: 0.25, orders: 0.25, advertisers: 0.5 },
   },
 
   // ANNAHME: Startgewichte – Früherkennung zählt am meisten, Wettbewerb ist in Phase 1 nur ein grober Proxy.

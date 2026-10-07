@@ -9,8 +9,8 @@ const weeks = (old: number, previous: number, recent: number) => [...Array(44).f
 const rising = scoreTrend(weeks(2, 20, 80), config.trend);
 const falling = scoreTrend(weeks(40, 60, 50), config.trend);
 const noise = scoreTrend(weeks(1, 1, 2), config.trend);
-const lowCompetition = scoreCompetition({ resultCount: 100, orders30dSum: 50, advertisers: 0, marketplaceListings: 5 }, config.competition);
-const highCompetition = scoreCompetition({ resultCount: 1e6, orders30dSum: 1e6, advertisers: 500, marketplaceListings: 1e6 }, config.competition);
+const lowCompetition = scoreCompetition({ resultCount: 100, orders30dSum: 50, advertisers: 0 }, config.competition);
+const highCompetition = scoreCompetition({ resultCount: 1e6, orders30dSum: 1e6, advertisers: 500 }, config.competition);
 
 describe("rankingVerdict", () => {
   const base = { trend: rising, competition: lowCompetition, total: 75, belowMinMargin: false };

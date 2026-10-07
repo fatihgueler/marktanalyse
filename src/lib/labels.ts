@@ -11,6 +11,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   "alibaba-1688": "1688",
   betrieb: "Betrieb",
   "pinterest-trends": "Pinterest Trends",
+  // nur noch für ältere Läufe, eBay ist seit Oktober 2026 keine Quelle mehr
   ebay: "eBay",
   "ezb-kurse": "EZB-Kurse",
 };

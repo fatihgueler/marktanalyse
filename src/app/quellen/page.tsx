@@ -20,7 +20,6 @@ const SOURCES: { id: string; role: string; vars: string; cost: string; required?
   { id: "aliexpress", role: "Einkauf", vars: "ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID", cost: "kostenlos", required: true },
   { id: "alibaba-1688", role: "Einkauf (Scraping)", vars: "APIFY_TOKEN und ANTHROPIC_API_KEY", cost: "Apify-Gratisguthaben" },
   { id: "google-shopping", role: "Verkaufspreis", vars: "SERPAPI_API_KEY", cost: "in SerpApi enthalten", required: true },
-  { id: "ebay", role: "Verkaufspreis und Wettbewerb", vars: "EBAY_CLIENT_ID, EBAY_CLIENT_SECRET", cost: "kostenlos", required: true },
   { id: "meta-ad-library", role: "Werbedruck (DE, AT)", vars: "META_ACCESS_TOKEN, META_APP_ID, META_APP_SECRET", cost: "kostenlos" },
   { id: "tiktok-ads", role: "Werbedruck (DE, AT)", vars: "TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET", cost: "kostenlos" },
   { id: "claude", role: "Matching und Übersetzung", vars: "ANTHROPIC_API_KEY", cost: "ca. 3 $/Monat", required: true },
