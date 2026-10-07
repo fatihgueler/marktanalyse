@@ -22,7 +22,7 @@ import {
 } from "@/lib/queries";
 import { shortTitle } from "@/lib/short-title";
 import type { CheckVerdict } from "@/scoring/product-check";
-import { competitionLevel, rankingVerdict, trendSummary } from "@/scoring/ranking";
+import { competitionLevel, deliveryWords, isSlowDelivery, rankingVerdict, trendSummary } from "@/scoring/ranking";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +50,18 @@ function movementBadge(movement: Movement, since: Date): ProductCardData["moveme
     : { label: `+${movement.delta} Punkte`, title: `gegenüber dem Lauf vom ${date}` };
 }
 
+function deliveryBadge(row: CandidateRow): ProductCardData["delivery"] {
+  const label = deliveryWords(row.breakdown.delivery);
+  if (!label) return null;
+  const slow = isSlowDelivery(row.breakdown.delivery);
+  const from = row.breakdown.delivery?.shipFrom ? ` aus ${row.breakdown.delivery.shipFrom}` : "";
+  return {
+    label,
+    slow,
+    title: slow ? `Lieferzeit${from} ${label} – länger als ${radarConfig.shipping.maxDeliveryDays} Tage` : `Lieferzeit${from} laut Anbieter`,
+  };
+}
+
 function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCardData["movement"]): ProductCardData {
   const { best } = group;
   const verdict = rankingVerdict({
@@ -70,6 +82,7 @@ function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCar
       { label: "Konkurrenz", value: competitionLevel(best.breakdown.competition) },
     ],
     chips: group.countries.map((c) => `${c.country} ${c.score}`),
+    delivery: deliveryBadge(best),
     movement,
     externalUrl: best.product.url,
   };
@@ -112,7 +125,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? await Promise.all([getCandidates(run.id, filters), getCategoryCounts(run.id, filters.country)])
     : [[] as CandidateRow[], new Map<string, number>()];
   for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
-  const allGroups = groupCandidates(rows, filters.sort);
+  const allGroups = groupCandidates(
+    rows.map((row) => ({ ...row, slowDelivery: isSlowDelivery(row.breakdown.delivery) })),
+    filters.sort,
+  );
 
   // „Neu diese Woche“: Vergleich mit dem Lauf von vor mindestens `compareMinDaysBack` Tagen.
   const comparison = run ? await getComparisonRun(run) : null;

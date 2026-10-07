@@ -51,6 +51,17 @@ describe("groupCandidates", () => {
     expect(groups.map((g) => g.best.id)).toEqual(["2", "3"]);
   });
 
+  it("nimmt als Vertreter lieber ein Angebot mit brauchbarer Lieferzeit", () => {
+    const [group] = groupCandidates(
+      [row("1", "p1", "wolkenlampe", "DE", 90, { slowDelivery: true }), row("2", "p2", "wolkenlampe", "DE", 80)],
+      "score",
+    );
+    expect(group?.best.id).toBe("2");
+    // gibt es nur langsame Angebote, bleibt es beim besten Score
+    const [onlySlow] = groupCandidates([row("3", "p3", "x", "DE", 60, { slowDelivery: true }), row("4", "p4", "x", "DE", 70, { slowDelivery: true })], "score");
+    expect(onlySlow?.best.id).toBe("4");
+  });
+
   it("sortiert nach Marge oder Trend, wenn gewählt", () => {
     const rows = [row("1", "p1", "a", "DE", 90, { marginPct: 0.2, trendScore: 0.9 }), row("2", "p2", "b", "DE", 50, { marginPct: 0.6, trendScore: 0.1 })];
     expect(groupCandidates(rows, "marge").map((g) => g.best.id)).toEqual(["2", "1"]);

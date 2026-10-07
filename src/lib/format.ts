@@ -21,7 +21,11 @@ export function formatWeek(isoDate: string): string {
   return new Intl.DateTimeFormat(LOCALE, { day: "2-digit", month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(isoDate));
 }
 
-/** Geldbetrag ohne Cent – für Karten, wo Cent nur Scheingenauigkeit wären. */
+/**
+ * Geldbetrag ohne Cent – für Karten, wo Cent nur Scheingenauigkeit wären. Unter 10 mit Cent,
+ * sonst sähen z. B. 4,60 € Einkauf und 5,20 € Stückkosten beide wie „5 €“ aus.
+ */
 export function formatMoneyRounded(value: number, currency: string): string {
-  return new Intl.NumberFormat(LOCALE, { style: "currency", currency, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(value);
+  const digits = Math.abs(value) < 10 ? 2 : 0;
+  return new Intl.NumberFormat(LOCALE, { style: "currency", currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value);
 }

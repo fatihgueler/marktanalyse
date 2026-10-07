@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scoreCompetition } from "./competition";
-import { competitionLevel, growthWords, rankingReason, rankingVerdict } from "./ranking";
+import { competitionLevel, deliveryWords, growthWords, isSlowDelivery, rankingReason, rankingVerdict } from "./ranking";
 import { makeTestConfig } from "./test-config";
 import { scoreTrend } from "./trend";
 
@@ -52,5 +52,21 @@ describe("Worte statt Zahlen", () => {
   it("stuft den Wettbewerb ein", () => {
     expect(competitionLevel(lowCompetition, config)).toBe("niedrig");
     expect(competitionLevel(highCompetition, config)).toBe("hoch");
+  });
+});
+
+describe("Lieferzeit", () => {
+  it("beschreibt die Spanne", () => {
+    expect(deliveryWords({ minDays: 7, maxDays: 12, shipFrom: "CN" })).toBe("7–12 Tage");
+    expect(deliveryWords({ minDays: 9, maxDays: 9, shipFrom: null })).toBe("9 Tage");
+    expect(deliveryWords({ minDays: null, maxDays: 15, shipFrom: null })).toBe("15 Tage");
+    expect(deliveryWords({ minDays: null, maxDays: null, shipFrom: null })).toBeNull();
+    expect(deliveryWords(undefined)).toBeNull();
+  });
+  it("ist zu langsam erst über der Grenze, gemessen am Höchstwert", () => {
+    expect(isSlowDelivery({ minDays: 10, maxDays: 20, shipFrom: "CN" }, config)).toBe(false);
+    expect(isSlowDelivery({ minDays: 10, maxDays: 21, shipFrom: "CN" }, config)).toBe(true);
+    expect(isSlowDelivery({ minDays: 25, maxDays: null, shipFrom: "CN" }, config)).toBe(true);
+    expect(isSlowDelivery(null, config)).toBe(false);
   });
 });

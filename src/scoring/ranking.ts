@@ -1,6 +1,7 @@
 import { radarConfig, type RadarConfig } from "@/config/radar.config";
 import type { CompetitionBreakdown } from "./competition";
 import { trendPhase, type TrendPhase } from "./product-check";
+import type { DeliveryEstimate } from "@/sources/types";
 import type { TrendBreakdown } from "./trend";
 
 export type RankingVerdict = "Jetzt testen" | "Beobachten" | "Zu spät" | "Marge zu dünn";
@@ -64,4 +65,19 @@ export function rankingReason(input: RankingInput, config: RadarConfig = radarCo
         ? "Das Nachfragesignal ist noch zu schwach für ein Urteil – im Blick behalten."
         : "Interessant, aber noch nicht eindeutig genug für einen Test – nächsten Lauf abwarten.";
   }
+}
+
+/** „7–12 Tage“, „9 Tage“; null ohne Angabe der Quelle. */
+export function deliveryWords(delivery: DeliveryEstimate | null | undefined): string | null {
+  if (!delivery) return null;
+  const { minDays, maxDays } = delivery;
+  if (minDays === null && maxDays === null) return null;
+  if (minDays === null || maxDays === null || minDays === maxDays) return `${maxDays ?? minDays} Tage`;
+  return `${minDays}–${maxDays} Tage`;
+}
+
+/** Länger als `shipping.maxDeliveryDays` (Höchstwert laut Quelle) – für einen Drop zu langsam. */
+export function isSlowDelivery(delivery: DeliveryEstimate | null | undefined, config: RadarConfig = radarConfig): boolean {
+  const days = delivery?.maxDays ?? delivery?.minDays ?? null;
+  return days !== null && days > config.shipping.maxDeliveryDays;
 }

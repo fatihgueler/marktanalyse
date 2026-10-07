@@ -132,6 +132,12 @@ export const radarConfig = {
      * Kandidaten, ohne zusätzliche API-Kosten (nur etwas mehr Claude-Tokens im Matching).
      */
     resultsPerKeyword: 12,
+    /**
+     * Echte Versandkosten und Lieferzeit (AliExpress `aliexpress.affiliate.product.shipping.get`, kostenlos)
+     * für die N meistverkauften Treffer je Suche; alle anderen rechnen mit der Pauschale `shipping.perItemEur`.
+     * Eine Abfrage je Angebot, gedrosselt wie alle Requests (`collect.requestDelayMs`).
+     */
+    shippingLookupsPerSearch: 5,
     /** Nur Keywords mit Trend-Score ≥ diesem Wert werden auf der Angebotsseite gesucht */
     minTrendScoreForSupply: 0.2,
   },
@@ -310,6 +316,12 @@ export const radarConfig = {
      * ANNAHME: AliExpress Standard Shipping / Choice für Kleinteile bis ~500 g.
      */
     perItemEur: { DE: 3.5, AT: 3.9, CH: 4.5, GB: 3.9 } satisfies Record<Country, number>,
+    /**
+     * Längste noch brauchbare Lieferzeit in Tagen (Höchstwert laut Quelle). Langsamere Angebote werden markiert
+     * und bei der Wahl des besten Angebots einer Produktgruppe nachrangig behandelt.
+     * ANNAHME: Bei einem Drop warten Kundinnen und Kunden höchstens etwa drei Wochen.
+     */
+    maxDeliveryDays: 20,
   },
 
   fees: {

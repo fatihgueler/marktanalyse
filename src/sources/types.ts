@@ -79,6 +79,10 @@ export interface SupplyRecord extends SourceRecord {
   currency: string;
   /** null → Versand-Annahme aus der Config */
   shippingCost: number | null;
+  /** Lieferzeit laut Quelle; fehlt, wenn die Quelle keine liefert */
+  delivery?: DeliveryEstimate | null;
+  /** Versandabfrage fehlgeschlagen – dann gilt die Pauschale; collect meldet es als Hinweis */
+  shippingError?: string;
   orders30d: number | null;
   /** positive Bewertungen in Prozent (0..100) */
   rating: number | null;
@@ -92,6 +96,13 @@ export interface SupplyRecord extends SourceRecord {
   moq?: number | null;
   /** Versandgewicht je Stück in kg, falls bekannt */
   weightKg?: number | null;
+}
+
+export interface DeliveryEstimate {
+  minDays: number | null;
+  maxDays: number | null;
+  /** Versandland, z. B. „CN“ oder „DE“ (Lager in Europa) */
+  shipFrom: string | null;
 }
 
 export interface PriceTier {

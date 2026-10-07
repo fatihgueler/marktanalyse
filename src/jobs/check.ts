@@ -36,6 +36,7 @@ import { mixedModeWarnings } from "@/sources/readiness";
 import { createSources, describeModes } from "@/sources/registry";
 import { Alibaba1688ApifySource } from "@/sources/scraping/alibaba-1688";
 import { TikTokHashtagsApifySource } from "@/sources/scraping/tiktok-hashtags";
+import { deliveryWords } from "@/scoring/ranking";
 import { AliExpressSource } from "@/sources/supply/aliexpress";
 
 loadDotenv({ quiet: true });
@@ -103,10 +104,16 @@ async function checkAliExpress(env: CollectEnv): Promise<Outcome> {
   if (!appKey || !appSecret || !trackingId) {
     return { status: "fehler", detail: "Es braucht alle drei: ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID" };
   }
-  const offers = await new AliExpressSource({ appKey, appSecret, trackingId }).search(PROBE_KEYWORD, "DE", 3);
+  // Eine Versandabfrage reicht für den Test (kostenlos, prüft SKU-ID, Steuersatz und Antwortformat).
+  const offers = await new AliExpressSource({ appKey, appSecret, trackingId }, 1).search(PROBE_KEYWORD, "DE", 3);
   if (offers.length === 0) return { status: "hinweis", detail: `Anmeldung ok, aber 0 Treffer für „${PROBE_KEYWORD}“ – Tracking-ID prüfen` };
   const first = offers[0];
-  return { status: "ok", detail: `${offers.length} Treffer, z. B. „${first?.title.slice(0, 50)}“ für ${formatMoney(first?.price ?? 0, first?.currency ?? "EUR")}` };
+  const found = `${offers.length} Treffer, z. B. „${first?.title.slice(0, 50)}“ für ${formatMoney(first?.price ?? 0, first?.currency ?? "EUR")}`;
+  if (first?.shippingError) return { status: "hinweis", detail: `${found}; Versandabfrage fehlgeschlagen (${first.shippingError}) → Pauschale` };
+  const days = first?.delivery ? deliveryWords(first.delivery) : null;
+  const shipping =
+    first?.shippingCost != null ? `Versand ${formatMoney(first.shippingCost, "EUR")}${days ? `, ${days}` : ""}` : "kein Versand ins Land gemeldet → Pauschale";
+  return { status: "ok", detail: `${found}, ${shipping}` };
 }
 
 async function checkPinterest(env: CollectEnv): Promise<Outcome> {

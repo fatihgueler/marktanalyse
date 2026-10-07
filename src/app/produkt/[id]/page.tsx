@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, ChevronDown, FlaskConical } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ChevronDown, FlaskConical, Truck } from "lucide-react";
 import { AdActivity } from "@/components/ad-activity";
 import { AppHeader } from "@/components/app-header";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
@@ -18,7 +18,7 @@ import { formatDateTime, formatMoney, formatMoneyRounded, formatNumber, formatPe
 import { demandMetric, judgeLabel, sourceLabel } from "@/lib/labels";
 import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
 import { shortTitle } from "@/lib/short-title";
-import { competitionLevel, rankingReason, rankingVerdict, trendSummary } from "@/scoring/ranking";
+import { competitionLevel, deliveryWords, isSlowDelivery, rankingReason, rankingVerdict, trendSummary } from "@/scoring/ranking";
 import { deleteDrop } from "./drop-actions";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +78,8 @@ export default async function ProductDetailPage({ params }: Params) {
   const { margin } = breakdown;
   const priceEstimated = candidate.referencePriceSource === "config-multiplikator";
   const metric = demandMetric(candidate.demandSignal.source);
+  const delivery = deliveryWords(breakdown.delivery);
+  const slowDelivery = isSlowDelivery(breakdown.delivery);
   const historyPoints = candidate.history.map((h) => ({
     // Uhrzeit mit anzeigen: Mehrere Läufe am selben Tag sollen unterscheidbar bleiben.
     label: new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }).format(h.startedAt),
@@ -131,12 +133,21 @@ export default async function ProductDetailPage({ params }: Params) {
             <div className="grid gap-2">
               <VerdictBadge label={verdict} tone={VERDICT_TONE[verdict]} className="w-fit px-3 py-1 text-base" />
               <p className="text-base leading-relaxed">{rankingReason(ranking)}</p>
+              {slowDelivery ? (
+                <p className="flex items-start gap-1.5 text-sm text-status-warning">
+                  <Truck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  Lieferzeit {delivery} – länger als {radarConfig.shipping.maxDeliveryDays} Tage, für einen Drop eigentlich zu lang. Ein Angebot mit Lager in Europa suchen.
+                </p>
+              ) : null}
             </div>
             <dl className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-muted/60 p-3">
                 <dt className="text-sm text-muted-foreground">Kaufen für</dt>
                 <dd className="text-2xl font-semibold tabular">{formatMoneyRounded(margin.purchase, margin.currency)}</dd>
-                <dd className="text-xs text-muted-foreground">mit Versand, Zoll &amp; Steuern {formatMoneyRounded(margin.landedCost, margin.currency)}</dd>
+                <dd className="text-xs text-muted-foreground">
+                  mit Versand, Zoll &amp; Steuern {formatMoneyRounded(margin.landedCost, margin.currency)}
+                  {margin.shippingSource === "config" ? " (Versand geschätzt)" : ""}
+                </dd>
               </div>
               <div className="rounded-lg bg-muted/60 p-3">
                 <dt className="text-sm text-muted-foreground">Verkaufen für</dt>
@@ -159,6 +170,12 @@ export default async function ProductDetailPage({ params }: Params) {
               <div className="flex gap-1.5">
                 <dt className="text-muted-foreground">Konkurrenz:</dt>
                 <dd className="font-medium">{competitionLevel(breakdown.competition)}</dd>
+              </div>
+              <div className="flex gap-1.5">
+                <dt className="text-muted-foreground">Lieferzeit:</dt>
+                <dd className={slowDelivery ? "font-medium text-status-warning" : "font-medium"}>
+                  {delivery ? `${delivery}${breakdown.delivery?.shipFrom ? ` aus ${breakdown.delivery.shipFrom}` : ""}` : "keine Angabe"}
+                </dd>
               </div>
             </dl>
           </div>

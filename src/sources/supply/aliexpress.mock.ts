@@ -1,5 +1,5 @@
-import type { Country } from "@/config/radar.config";
 import { findMockProduct } from "../mock/catalog";
+import { radarConfig, type Country } from "@/config/radar.config";
 import { between, createRng, hashString } from "../mock/random";
 import type { SupplyRecord, SupplySource } from "../types";
 
@@ -35,6 +35,11 @@ export class AliExpressMockSource implements SupplySource {
       const isDecoy = product ? rank >= product.titles.length : false;
       const externalId = mockProductId(`${slug}|${title}`);
       const price = Math.round(basePrice * (isDecoy ? between(rng, 0.3, 0.8) : between(rng, 0.85, 1.35)) * 100) / 100;
+      // Wie live: Versand nur für die ersten Treffer; ein Teil ist kostenlos (Choice), ein Teil sehr langsam.
+      const quoted = rank < radarConfig.supply.shippingLookupsPerSearch;
+      const fee = rng() < 0.35 ? 0 : Math.round(between(rng, 0.9, 4.5) * 100) / 100;
+      const minDays = Math.round(between(rng, 6, 16));
+      const maxDays = minDays + Math.round(between(rng, 3, 12));
       return {
         source: this.id,
         country: shipTo,
@@ -46,7 +51,8 @@ export class AliExpressMockSource implements SupplySource {
         imageUrl: null,
         price,
         currency: "EUR",
-        shippingCost: null,
+        shippingCost: quoted ? fee : null,
+        delivery: quoted ? { minDays, maxDays, shipFrom: "CN" } : null,
         orders30d: Math.round(topOrders * 0.6 ** rank * between(rng, 0.8, 1.2)),
         rating: Math.round(between(rng, 88, 99) * 10) / 10,
         resultCount,

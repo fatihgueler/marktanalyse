@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Package, Sparkles } from "lucide-react";
+import { ArrowUpRight, Package, Sparkles, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CheckVerdict } from "@/scoring/product-check";
 import type { RankingVerdict } from "@/scoring/ranking";
@@ -36,6 +36,8 @@ export interface ProductCardData {
   chips: string[];
   /** Hinweis wie „Merkliste: Geprüft“ */
   badge?: string;
+  /** Lieferzeit laut Quelle, z. B. „7–12 Tage“; slow = über der Grenze aus der Config */
+  delivery?: { label: string; slow: boolean; title: string } | null;
   /** „Neu“ oder „+12 Punkte“ gegenüber dem Vergleichslauf */
   movement?: { label: string; title: string } | null;
   externalUrl?: string | null;
@@ -90,6 +92,19 @@ export function ProductCard({ data }: { data: ProductCardData }) {
               <Sparkles className="size-3.5" aria-hidden="true" />
               {data.movement.label}
               <span className="sr-only"> ({data.movement.title})</span>
+            </span>
+          ) : null}
+          {data.delivery ? (
+            <span
+              title={data.delivery.title}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium tabular",
+                data.delivery.slow ? "bg-status-warning/14 text-status-warning" : "bg-muted",
+              )}
+            >
+              <Truck className="size-3.5" aria-hidden="true" />
+              {data.delivery.label}
+              <span className="sr-only"> Lieferzeit{data.delivery.slow ? ", zu lang für einen Drop" : ""}</span>
             </span>
           ) : null}
           {data.chips.map((chip) => (

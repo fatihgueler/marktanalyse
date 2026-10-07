@@ -23,7 +23,7 @@ export function makeTestConfig(): RadarConfig {
   };
   config.categories.beleuchtung.dutyRate = { EU: 0.047, GB: 0.02, CH: 0 };
   config.categories.beleuchtung.retailMultiplier = 3.2;
-  config.shipping.perItemEur = { DE: 3.5, AT: 3.9, CH: 4.5, GB: 3.9 };
+  config.shipping = { perItemEur: { DE: 3.5, AT: 3.9, CH: 4.5, GB: 3.9 }, maxDeliveryDays: 20 };
   config.fees = { paymentFeePct: 0.021, paymentFeeFixedEur: 0.3 };
   config.margin = { minMarginPct: 0.2, targetMarginPct: 0.55, minMarginAbsEur: 8 };
   config.ranking = { testNowMinScore: 60, competitionHighBelow: 0.35, competitionLowMin: 0.6, growthStrongMin: 1, growthMin: 0.25, compareMinDaysBack: 5, risingMinPoints: 10 };

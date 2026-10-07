@@ -9,6 +9,8 @@ export interface GroupableRow {
   marginPct: number;
   trendScore: number;
   belowMinMargin: boolean;
+  /** Lieferzeit über `shipping.maxDeliveryDays` */
+  slowDelivery?: boolean;
 }
 
 export interface CandidateGroup<T extends GroupableRow> {
@@ -21,9 +23,10 @@ export interface CandidateGroup<T extends GroupableRow> {
   offerCount: number;
 }
 
-/** Bevorzugt Kandidaten über der Mindestmarge, dann den höheren Gesamtscore. */
+/** Bevorzugt Kandidaten über der Mindestmarge, dann mit brauchbarer Lieferzeit, dann den höheren Gesamtscore. */
 function better<T extends GroupableRow>(a: T, b: T): T {
   if (a.belowMinMargin !== b.belowMinMargin) return a.belowMinMargin ? b : a;
+  if (Boolean(a.slowDelivery) !== Boolean(b.slowDelivery)) return a.slowDelivery ? b : a;
   return b.totalScore > a.totalScore ? b : a;
 }
 

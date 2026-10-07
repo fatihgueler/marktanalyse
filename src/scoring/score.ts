@@ -4,6 +4,7 @@ import type { AdsBreakdown } from "./ads";
 import type { CompetitionBreakdown } from "./competition";
 import type { MarginBreakdown } from "./margin";
 import type { TrendBreakdown } from "./trend";
+import type { DeliveryEstimate } from "@/sources/types";
 
 export interface ScoreInput {
   trend: TrendBreakdown;
@@ -51,6 +52,8 @@ export interface CandidateBreakdown {
   referencePrice: { source: string; sampleSize: number | null; originalPrice: number; originalCurrency: string };
   /** Werbeaktivität (Phase 2); fehlt bei Snapshots aus Läufen vor Phase 2 */
   ads?: AdsBreakdown;
+  /** Lieferzeit laut Quelle; fehlt ohne Versandabfrage und bei älteren Snapshots */
+  delivery?: DeliveryEstimate;
   /** Wechselkurse des Laufs; fehlt bei älteren Snapshots (dort feste Kurse) */
   fx?: { source: "ezb" | "config"; date: string | null };
 }

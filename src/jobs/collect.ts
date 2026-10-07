@@ -288,6 +288,16 @@ async function searchAllSupply(ctx: RunContext, keyword: string, country: Countr
     try {
       const offers = await supply.search(keyword, country, radarConfig.supply.resultsPerKeyword);
       if (offers.length > 0) results.push({ supply, offers });
+      const failed = offers.filter((o) => o.shippingError);
+      if (failed.length > 0) {
+        ctx.errors.push({
+          level: "warnung",
+          source: supply.id,
+          country,
+          keyword,
+          message: `Versandabfrage für ${failed.length} Angebot(e) fehlgeschlagen, dort gilt die Pauschale: ${failed[0]?.shippingError}`,
+        });
+      }
     } catch (error) {
       ctx.errors.push({ source: supply.id, country, keyword, message: errorMessage(error) });
     }
@@ -401,6 +411,7 @@ async function processOffers(
         originalCurrency: referenceCurrency,
       },
       ads,
+      delivery: offer.delivery ?? undefined,
       fx: { source: ctx.fx.source, date: ctx.fx.date },
     };
 
