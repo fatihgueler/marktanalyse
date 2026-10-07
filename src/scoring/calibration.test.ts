@@ -42,4 +42,13 @@ describe("calibrationStats", () => {
     const trend = calibrationStats(rows, config).signals.find((s) => s.key === "trend");
     expect(trend?.assessment).toBe("trennt schwach");
   });
+
+  it("zählt Produkte aus dem Produkt-Check nur bei den Signalen, die sie haben", () => {
+    const manual = (verdict: CalibrationRow["verdict"], margin: number): CalibrationRow => ({ verdict, trend: null, margin, competition: null, total: null, adMomentum: null });
+    const rows = [0.9, 0.8, 0.85].map((m) => manual("TOP", m)).concat([0.3, 0.2, 0.25].map((m) => manual("FLOP", m)));
+    const signals = new Map(calibrationStats(rows, config).signals.map((s) => [s.key, s]));
+    expect(signals.get("margin")?.assessment).toBe("trennt gut");
+    expect(signals.get("trend")?.assessment).toBe("zu wenige Daten");
+    expect(signals.get("total")?.assessment).toBe("zu wenige Daten");
+  });
 });

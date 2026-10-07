@@ -1,10 +1,12 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { SESSION_COOKIE, isValidSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { assertSession } from "@/lib/session";
+
+/** Manuelle Produkte hängen über ein SupplyProduct mit dieser Quelle an DropOutcome (externalId = ProductCheck.id). */
+const MANUAL_SOURCE = "manuell";
 
 export interface DropFormState {
   error: string | null;
@@ -14,7 +16,9 @@ export interface DropFormState {
 const MAX_NOTE_LENGTH = 500;
 
 const dropSchema = z.object({
-  candidateSnapshotId: z.string().min(1),
+  // genau eins von beiden: automatischer Kandidat oder Produkt-Check
+  candidateSnapshotId: z.string(),
+  productCheckId: z.string(),
   droppedAt: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Datum fehlt oder ist ungültig.")
@@ -31,16 +35,11 @@ const dropSchema = z.object({
   note: z.string().max(MAX_NOTE_LENGTH, `Notiz: höchstens ${MAX_NOTE_LENGTH} Zeichen.`),
 });
 
-async function assertSession(): Promise<void> {
-  // Zusätzlich zur Middleware: Server Actions sind eigene Endpunkte und prüfen die Sitzung selbst.
-  const cookieStore = await cookies();
-  if (!(await isValidSession(cookieStore.get(SESSION_COOKIE)?.value))) throw new Error("Nicht angemeldet.");
-}
-
 export async function recordDrop(_prev: DropFormState, formData: FormData): Promise<DropFormState> {
   await assertSession();
   const parsed = dropSchema.safeParse({
     candidateSnapshotId: formData.get("candidateSnapshotId") ?? "",
+    productCheckId: formData.get("productCheckId") ?? "",
     droppedAt: formData.get("droppedAt") ?? "",
     unitsSold: formData.get("unitsSold") ?? "",
     returnRatePercent: formData.get("returnRatePercent") ?? "",
@@ -50,6 +49,30 @@ export async function recordDrop(_prev: DropFormState, formData: FormData): Prom
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Eingabe ungültig.", saved: false };
 
   const db = getDb();
+  const outcome = {
+    droppedAt: new Date(`${parsed.data.droppedAt}T00:00:00Z`),
+    unitsSold: parsed.data.unitsSold,
+    returnRate: parsed.data.returnRatePercent === null ? null : parsed.data.returnRatePercent / 100,
+    verdict: parsed.data.verdict,
+    note: parsed.data.note.trim() || null,
+  };
+
+  if (parsed.data.productCheckId) {
+    const check = await db.productCheck.findUnique({ where: { id: parsed.data.productCheckId } });
+    if (!check) return { error: "Produkt nicht gefunden.", saved: false };
+    const product = await db.supplyProduct.upsert({
+      where: { source_externalId: { source: MANUAL_SOURCE, externalId: check.id } },
+      create: { source: MANUAL_SOURCE, externalId: check.id, title: check.name, url: check.url ?? "" },
+      update: { title: check.name, url: check.url ?? "" },
+    });
+    await db.dropOutcome.create({ data: { productId: product.id, country: check.country, keyword: check.name, ...outcome } });
+    await db.productCheck.update({ where: { id: check.id }, data: { stage: "ERGEBNIS" } });
+    revalidatePath(`/merkliste/${check.id}`);
+    revalidatePath("/merkliste");
+    revalidatePath("/kalibrierung");
+    return { error: null, saved: true };
+  }
+
   const snapshot = await db.candidateSnapshot.findUnique({
     where: { id: parsed.data.candidateSnapshotId },
     select: { id: true, productId: true, country: true, keyword: true },
@@ -62,11 +85,7 @@ export async function recordDrop(_prev: DropFormState, formData: FormData): Prom
       candidateSnapshotId: snapshot.id,
       country: snapshot.country,
       keyword: snapshot.keyword,
-      droppedAt: new Date(`${parsed.data.droppedAt}T00:00:00Z`),
-      unitsSold: parsed.data.unitsSold,
-      returnRate: parsed.data.returnRatePercent === null ? null : parsed.data.returnRatePercent / 100,
-      verdict: parsed.data.verdict,
-      note: parsed.data.note.trim() || null,
+      ...outcome,
     },
   });
   revalidatePath(`/produkt/${snapshot.id}`);
@@ -78,8 +97,10 @@ export async function deleteDrop(formData: FormData): Promise<void> {
   await assertSession();
   const id = String(formData.get("id") ?? "");
   const snapshotId = String(formData.get("snapshotId") ?? "");
+  const checkId = String(formData.get("checkId") ?? "");
   if (!id) return;
   await getDb().dropOutcome.delete({ where: { id } }).catch(() => undefined);
   if (snapshotId) revalidatePath(`/produkt/${snapshotId}`);
+  if (checkId) revalidatePath(`/merkliste/${checkId}`);
   revalidatePath("/kalibrierung");
 }

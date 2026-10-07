@@ -5,11 +5,14 @@ export type Verdict = "TOP" | "OK" | "FLOP";
 
 export interface CalibrationRow {
   verdict: Verdict;
-  /** Teil-Scores 0..1 und Gesamtscore 0..100 zum Zeitpunkt der Drop-Entscheidung */
-  trend: number;
+  /**
+   * Teil-Scores 0..1 und Gesamtscore 0..100 zum Zeitpunkt der Drop-Entscheidung.
+   * null = unbekannt, z. B. bei Produkten aus dem Produkt-Check (kein Wettbewerb, Trend nur mit CSV).
+   */
+  trend: number | null;
   margin: number;
-  competition: number;
-  total: number;
+  competition: number | null;
+  total: number | null;
   /** Marktdynamik der Werbung (relatives Wachstum) oder null, wenn unbekannt/neu */
   adMomentum: number | null;
 }
@@ -34,7 +37,7 @@ export interface CalibrationResult {
 const SIGNALS: SignalKey[] = ["trend", "margin", "competition", "total", "adMomentum"];
 
 function valueOf(row: CalibrationRow, key: SignalKey): number | null {
-  if (key === "total") return row.total / 100;
+  if (key === "total") return row.total === null ? null : row.total / 100;
   return row[key];
 }
 

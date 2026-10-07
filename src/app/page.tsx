@@ -5,7 +5,7 @@ import { FilterBar } from "@/components/filter-bar";
 import { RunStatus, type RunNote } from "@/components/run-status";
 import { ScoreLegend } from "@/components/score-bar";
 import { CATEGORY_IDS, COUNTRIES, radarConfig } from "@/config/radar.config";
-import { getCandidates, getCategoryCounts, getLatestRun, parseFilters } from "@/lib/queries";
+import { getCandidates, getCategoryCounts, getLatestRun, getProductChecks, parseFilters, type CheckRow, type SortKey } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -17,36 +17,56 @@ const SORT_OPTIONS = [
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const filters = parseFilters(await searchParams);
-  const run = await getLatestRun();
+  const [run, manualInCountry] = await Promise.all([getLatestRun(), getProductChecks({ country: filters.country })]);
+  const manualSorted = sortManual(
+    manualInCountry.filter((c) => !filters.category || c.category === filters.category),
+    filters.sort,
+  );
 
   return (
     <>
       <AppHeader active="rangliste" />
       <main id="inhalt" className="mx-auto max-w-[1400px] px-4 pb-16 pt-8 sm:px-6">
         {!run ? (
-          <EmptyState
-            icon={<Radar className="size-10" strokeWidth={1.5} aria-hidden="true" />}
-            title="Noch kein Lauf vorhanden"
-            text="Starte einen Datenlauf mit „npm run collect“ – ohne API-Keys läuft er mit Demo-Daten."
-          />
+          manualSorted.length > 0 ? (
+            <CandidateTable rows={[]} manual={manualSorted} />
+          ) : (
+            <EmptyState
+              icon={<Radar className="size-10" strokeWidth={1.5} aria-hidden="true" />}
+              title="Noch kein Lauf vorhanden"
+              text="Starte einen Datenlauf mit „npm run collect“ – ohne API-Keys läuft er mit Demo-Daten. Eigene Produkte prüfst du im Produkt-Check."
+            />
+          )
         ) : (
-          <Dashboard runId={run.id} filters={filters} run={run} />
+          <Dashboard runId={run.id} filters={filters} run={run} manual={manualSorted} manualInCountry={manualInCountry} />
         )}
       </main>
     </>
   );
 }
 
+/** Eigene Produkte nach der gewählten Sortierung: Trend nach Trend-Score, sonst nach Marge. */
+function sortManual(rows: CheckRow[], sort: SortKey): CheckRow[] {
+  const key = (r: CheckRow) => (sort === "trend" ? (r.trendScore ?? -1) : r.marginPct);
+  return [...rows].sort((a, b) => key(b) - key(a));
+}
+
 async function Dashboard({
   runId,
   filters,
   run,
+  manual,
+  manualInCountry,
 }: {
   runId: string;
   filters: ReturnType<typeof parseFilters>;
   run: NonNullable<Awaited<ReturnType<typeof getLatestRun>>>;
+  manual: CheckRow[];
+  /** für die Kategorie-Zähler im Filter: eigene Produkte des Landes, unabhängig von der gewählten Kategorie */
+  manualInCountry: CheckRow[];
 }) {
   const [rows, categoryCounts] = await Promise.all([getCandidates(runId, filters), getCategoryCounts(runId, filters.country)]);
+  for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
   const aboveMin = rows.filter((r) => !r.belowMinMargin).length;
   const notes = Array.isArray(run.errors) ? (run.errors as unknown as RunNote[]) : [];
 
@@ -88,14 +108,14 @@ async function Dashboard({
         <ScoreLegend />
       </div>
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && manual.length === 0 ? (
         <EmptyState
           icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />}
           title="Keine Kandidaten für diese Filter"
           text="Wähle ein anderes Land oder eine andere Kategorie."
         />
       ) : (
-        <CandidateTable rows={rows} />
+        <CandidateTable rows={rows} manual={manual} />
       )}
     </>
   );

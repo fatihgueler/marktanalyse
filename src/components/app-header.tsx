@@ -7,6 +7,8 @@ import { RadarMark } from "./radar-mark";
 
 const NAV = [
   { href: "/", label: "Rangliste", key: "rangliste" },
+  { href: "/check", label: "Produkt-Check", key: "check" },
+  { href: "/merkliste", label: "Merkliste", key: "merkliste" },
   { href: "/kalibrierung", label: "Kalibrierung", key: "kalibrierung" },
   { href: "/quellen", label: "Quellen", key: "quellen" },
 ] as const;
@@ -22,14 +24,14 @@ export function AppHeader({ active }: { active?: (typeof NAV)[number]["key"] }) 
             <span className="block text-base font-bold tracking-tight">Trend-Radar</span>
           </span>
         </Link>
-        <nav aria-label="Hauptnavigation" className="mr-auto ml-4 flex gap-1 sm:ml-8">
+        <nav aria-label="Hauptnavigation" className="mr-auto ml-2 flex min-w-0 gap-1 overflow-x-auto sm:ml-8">
           {NAV.map((item) => (
             <Link
               key={item.key}
               href={item.href}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
-                "rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                "shrink-0 rounded-md px-2.5 py-1.5 text-sm transition-colors",
                 active === item.key ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
             >

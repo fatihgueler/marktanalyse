@@ -17,7 +17,16 @@ const VERDICTS = [
 ] as const;
 
 /** Erfasst das Ergebnis eines echten Drops – Grundlage für /kalibrierung. */
-export function DropFeedbackForm({ candidateSnapshotId, today }: { candidateSnapshotId: string; today: string }) {
+export function DropFeedbackForm({
+  candidateSnapshotId = "",
+  productCheckId = "",
+  today,
+}: {
+  /** genau eins von beiden: automatischer Kandidat oder Produkt-Check */
+  candidateSnapshotId?: string;
+  productCheckId?: string;
+  today: string;
+}) {
   const [state, formAction, pending] = useActionState(recordDrop, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -28,6 +37,7 @@ export function DropFeedbackForm({ candidateSnapshotId, today }: { candidateSnap
   return (
     <form ref={formRef} action={formAction} className="grid gap-4">
       <input type="hidden" name="candidateSnapshotId" value={candidateSnapshotId} />
+      <input type="hidden" name="productCheckId" value={productCheckId} />
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium">Urteil</legend>
         <div className="grid grid-cols-3 gap-2">

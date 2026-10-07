@@ -535,6 +535,20 @@ export const radarConfig = {
     apifyMonthlyUsd: 5,
   },
 
+  /**
+   * Produkt-Check (manuelle Prüfung ohne APIs). Das Urteil richtet sich nach der Marge pro Stück
+   * nach Einkauf, Versand, Zoll, Einfuhrumsatzsteuer, ggf. USt und Zahlungsgebühren – vor Werbung.
+   * „Lohnt sich“: beide Schwellen von `worthIt` erreicht; „Knapp“: beide von `tight`; sonst „Finger weg“.
+   * ANNAHME: 35 % und 15 € lassen genug Luft für Werbekosten pro Verkauf, wie sie bei Impulsprodukten
+   * in DACH üblich sind; 20 % und 8 € entsprechen der Mindestmarge der Rangliste (`margin`).
+   */
+  productCheck: {
+    worthIt: { minMarginPct: 0.35, minMarginAbsEur: 15 },
+    tight: { minMarginPct: 0.2, minMarginAbsEur: 8 },
+    /** Trendphase aus der Google-Trends-CSV: ab diesem Frühphasen-Anteil (0..1) gilt ein Anstieg als „Frühphase“ */
+    earlyPhaseMin: 0.5,
+  },
+
   calibration: {
     /** Mindestanzahl Drops je Gruppe (Top und Flop), bevor eine Aussage angezeigt wird */
     minPerGroup: 3,

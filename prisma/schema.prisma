@@ -248,3 +248,44 @@ model ApiToken {
   expiresAt    DateTime?
   updatedAt    DateTime  @updatedAt
 }
+
+/// Stufen der Merkliste
+enum PipelineStage {
+  IDEE
+  GEPRUEFT
+  TEST_DROP
+  ERGEBNIS
+}
+
+/// Manuell geprüftes Produkt (Produkt-Check) – zugleich Eintrag der Merkliste.
+/// Drop-Ergebnisse hängen über ein SupplyProduct mit source „manuell“ und externalId = id an DropOutcome.
+model ProductCheck {
+  id               String        @id @default(cuid())
+  name             String
+  url              String?
+  purchasePrice    Decimal       @db.Decimal(10, 2)
+  purchaseCurrency String
+  /// je Stück in der Einkaufswährung; null = Config-Annahme
+  shippingCost     Decimal?      @db.Decimal(10, 2)
+  weightKg         Float?
+  category         String
+  country          Country
+  /// brutto in Landeswährung; null = Schätzung über den Kategorie-Faktor
+  plannedPrice     Decimal?      @db.Decimal(10, 2)
+  stage            PipelineStage @default(GEPRUEFT)
+  /// Rechenweg zum Zeitpunkt der Prüfung (ProductCheckResult + Kurse)
+  result           Json
+  verdict          String
+  marginScore      Float
+  marginAbs        Decimal       @db.Decimal(10, 2)
+  marginPct        Float
+  /// aus einer importierten Google-Trends-CSV
+  trendKeyword     String?
+  trendSeries      Json?
+  trendScore       Float?
+  trendPhase       String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([stage])
+}

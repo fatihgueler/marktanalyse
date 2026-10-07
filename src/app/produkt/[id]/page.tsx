@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/app-header";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { DropFeedbackForm } from "@/components/drop-feedback-form";
 import { MarginBreakdown } from "@/components/margin-breakdown";
+import { ResearchLinks } from "@/components/research-links";
 import { ScoreBar, ScoreLegend } from "@/components/score-bar";
 import { ScoreBreakdown } from "@/components/score-breakdown";
 import { ScoreHistoryChart } from "@/components/score-history-chart";
@@ -149,6 +150,11 @@ export default async function ProductDetailPage({ params }: Params) {
             </dl>
             <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">„{candidate.matchReason}“</p>
           </aside>
+        </section>
+
+        <section aria-labelledby="recherche-titel" className="grid gap-3">
+          <h2 id="recherche-titel" className="text-lg font-semibold">Recherche zu „{candidate.keyword}“</h2>
+          <ResearchLinks name={candidate.keyword} country={country} />
         </section>
 
         <section aria-labelledby="warum-titel" className="grid gap-4">

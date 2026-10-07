@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { CalibrationRow } from "@/scoring/calibration";
 import type { CandidateBreakdown } from "@/scoring/score";
 import type { TrendPoint } from "@/sources/types";
+import type { CheckView } from "@/app/check/actions";
 import { getDb } from "./db";
 
 export type SortKey = "score" | "marge" | "trend";
@@ -135,13 +136,22 @@ export async function getCalibrationData() {
   const outcomes = await getDb().dropOutcome.findMany({
     orderBy: [{ droppedAt: "desc" }, { createdAt: "desc" }],
     include: {
-      product: { select: { title: true } },
+      product: { select: { title: true, source: true, externalId: true } },
       candidateSnapshot: { select: { id: true, trendScore: true, marginScore: true, competitionScore: true, totalScore: true, breakdown: true } },
     },
   });
+  // Drops aus der Merkliste: Scores aus dem Produkt-Check (SupplyProduct „manuell“, externalId = ProductCheck.id)
+  const manualIds = outcomes.filter((o) => !o.candidateSnapshot && o.product.source === "manuell").map((o) => o.product.externalId);
+  const checks = new Map(
+    (await getDb().productCheck.findMany({ where: { id: { in: manualIds } }, select: { id: true, trendScore: true, marginScore: true } })).map((c) => [c.id, c]),
+  );
   return outcomes.map((o) => {
     const breakdown = o.candidateSnapshot?.breakdown as unknown as CandidateBreakdown | undefined;
-    const row: CalibrationRow | null = o.candidateSnapshot
+    const check = o.product.source === "manuell" ? checks.get(o.product.externalId) : undefined;
+    const manualRow: CalibrationRow | null = check
+      ? { verdict: o.verdict, trend: check.trendScore, margin: check.marginScore, competition: null, total: null, adMomentum: null }
+      : null;
+    const row: CalibrationRow | null = manualRow ?? (o.candidateSnapshot
       ? {
           verdict: o.verdict,
           trend: o.candidateSnapshot.trendScore,
@@ -150,8 +160,8 @@ export async function getCalibrationData() {
           total: o.candidateSnapshot.totalScore,
           adMomentum: breakdown?.ads?.covered ? breakdown.ads.momentum.growth : null,
         }
-      : null;
-    return { ...o, row };
+      : null);
+    return { ...o, row, checkId: check?.id ?? null };
   });
 }
 
@@ -159,3 +169,39 @@ export async function getCalibrationData() {
 export async function getPinterestConnection() {
   return getDb().apiToken.findUnique({ where: { provider: "pinterest" }, select: { expiresAt: true, updatedAt: true } });
 }
+
+/** Merkliste (Produkt-Check), neueste zuerst; optional nach Land und Kategorie gefiltert. */
+export async function getProductChecks(filters: { country?: Country | null; category?: CategoryId | null } = {}) {
+  const rows = await getDb().productCheck.findMany({
+    where: {
+      ...(filters.country ? { country: filters.country } : {}),
+      ...(filters.category ? { category: filters.category } : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  return rows.map(toCheckRow);
+}
+
+export async function getProductCheck(id: string) {
+  const db = getDb();
+  const check = await db.productCheck.findUnique({ where: { id } });
+  if (!check) return null;
+  const drops = await db.dropOutcome.findMany({
+    where: { product: { source: "manuell", externalId: id } },
+    orderBy: [{ droppedAt: "desc" }, { createdAt: "desc" }],
+  });
+  return { ...toCheckRow(check), drops };
+}
+
+function toCheckRow(check: Awaited<ReturnType<ReturnType<typeof getDb>["productCheck"]["findFirstOrThrow"]>>) {
+  return {
+    ...check,
+    country: check.country as Country,
+    view: check.result as unknown as CheckView,
+    trendSeries: (check.trendSeries ?? null) as unknown as TrendPoint[] | null,
+    marginAbs: Number(check.marginAbs),
+    purchasePrice: Number(check.purchasePrice),
+  };
+}
+
+export type CheckRow = ReturnType<typeof toCheckRow>;

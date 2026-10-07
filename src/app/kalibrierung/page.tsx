@@ -150,6 +150,10 @@ export default async function CalibrationPage() {
                             <Link href={`/produkt/${o.candidateSnapshot.id}`} className="line-clamp-1 hover:underline">
                               {o.product.title}
                             </Link>
+                          ) : o.checkId ? (
+                            <Link href={`/merkliste/${o.checkId}`} className="line-clamp-1 hover:underline">
+                              {o.product.title}
+                            </Link>
                           ) : (
                             <span className="line-clamp-1">{o.product.title}</span>
                           )}
@@ -158,9 +162,11 @@ export default async function CalibrationPage() {
                         <td className="px-4 py-3 font-mono text-xs">{o.country}</td>
                         <td className="px-4 py-3">{o.verdict === "TOP" ? "Top" : o.verdict === "OK" ? "Okay" : "Flop"}</td>
                         <td className="px-4 py-3 text-right font-mono tabular">{o.unitsSold ?? "–"}</td>
-                        <td className="px-4 py-3 text-right font-mono tabular">{o.row ? formatNumber(o.row.total, 1) : "–"}</td>
+                        <td className="px-4 py-3 text-right font-mono tabular">{o.row?.total != null ? formatNumber(o.row.total, 1) : "–"}</td>
                         <td className="px-4 py-3 text-right font-mono text-xs tabular text-muted-foreground">
-                          {o.row ? `${formatNumber(o.row.trend, 2)} / ${formatNumber(o.row.margin, 2)} / ${formatNumber(o.row.competition, 2)}` : "Snapshot gelöscht"}
+                          {o.row
+                            ? [o.row.trend, o.row.margin, o.row.competition].map((v) => (v === null ? "–" : formatNumber(v, 2))).join(" / ")
+                            : "Snapshot gelöscht"}
                         </td>
                       </tr>
                     ))}
