@@ -37,7 +37,8 @@ export class Alibaba1688MockSource implements SupplySource {
         externalId,
         keyword,
         title,
-        url: `https://detail.1688.com/offer/${externalId}.html`,
+        // Demo: keine erfundene Artikelseite (wäre ein 404), sondern die echte Suche nach dem Keyword
+        url: `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(keyword)}`,
         imageUrl: null,
         price: base,
         currency: "CNY",

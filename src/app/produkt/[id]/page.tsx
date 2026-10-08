@@ -17,6 +17,7 @@ import { radarConfig, type CategoryId, type Country } from "@/config/radar.confi
 import { formatDateTime, formatMoney, formatMoneyRounded, formatNumber, formatPercent, formatWeek } from "@/lib/format";
 import { demandMetric, judgeLabel, sourceLabel } from "@/lib/labels";
 import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
+import { offerLink } from "@/lib/offer-link";
 import { shortTitle } from "@/lib/short-title";
 import { competitionLevel, deliveryWords, isSlowDelivery, rankingReason, rankingVerdict, trendSummary } from "@/scoring/ranking";
 import { deleteDrop } from "./drop-actions";
@@ -79,6 +80,7 @@ export default async function ProductDetailPage({ params }: Params) {
   const priceEstimated = candidate.referencePriceSource === "config-multiplikator";
   const metric = demandMetric(candidate.demandSignal.source);
   const delivery = deliveryWords(breakdown.delivery);
+  const link = offerLink(candidate.product, candidate.sourceModes, candidate.keyword);
   const slowDelivery = isSlowDelivery(breakdown.delivery);
   const historyPoints = candidate.history.map((h) => ({
     // Uhrzeit mit anzeigen: Mehrere Läufe am selben Tag sollen unterscheidbar bleiben.
@@ -109,16 +111,20 @@ export default async function ProductDetailPage({ params }: Params) {
                 Originaltitel: {candidate.product.title}
               </p>
               <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                <a
-                  href={candidate.product.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 rounded-md border bg-card px-2.5 py-1.5 font-medium transition hover:bg-accent active:scale-[0.98]"
-                >
-                  Auf {sourceLabel(candidate.product.source)} ansehen
-                  <ArrowUpRight className="size-3.5" aria-hidden="true" />
-                  <span className="sr-only">(neuer Tab)</span>
-                </a>
+                {link ? (
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 rounded-md border bg-card px-2.5 py-1.5 font-medium transition hover:bg-accent active:scale-[0.98]"
+                  >
+                    {link.demo
+                      ? `Demo-Angebot – ähnliche auf ${sourceLabel(candidate.product.source)} suchen`
+                      : `Auf ${sourceLabel(candidate.product.source)} ansehen`}
+                    <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                    <span className="sr-only">(neuer Tab)</span>
+                  </a>
+                ) : null}
                 {demoSources.length > 0 ? (
                   <span className="flex items-center gap-1 rounded-md border border-status-warning/40 px-2.5 py-1.5 text-status-warning">
                     <FlaskConical className="size-3.5" aria-hidden="true" />

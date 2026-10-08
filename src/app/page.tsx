@@ -7,6 +7,7 @@ import { CATEGORY_IDS, COUNTRIES, radarConfig, type CategoryId } from "@/config/
 import { groupCandidates, type CandidateGroup } from "@/lib/candidate-groups";
 import { formatMoneyRounded, formatPercent } from "@/lib/format";
 import { groupMovement, indexPrevious, type Movement } from "@/lib/movement";
+import { offerLink } from "@/lib/offer-link";
 import { STAGE_LABELS } from "@/lib/pipeline";
 import {
   getCandidates,
@@ -15,13 +16,16 @@ import {
   getLatestRun,
   getPreviousCandidates,
   getProductChecks,
+  hiddenDemoSources,
   parseFilters,
   type CandidateRow,
   type CheckRow,
   type SortKey,
 } from "@/lib/queries";
+import { sourceLabel } from "@/lib/labels";
 import { shortTitle } from "@/lib/short-title";
 import type { CheckVerdict } from "@/scoring/product-check";
+import { SUPPLY_SOURCES } from "@/sources/readiness";
 import { competitionLevel, deliveryWords, isSlowDelivery, rankingVerdict, trendSummary } from "@/scoring/ranking";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +66,7 @@ function deliveryBadge(row: CandidateRow): ProductCardData["delivery"] {
   };
 }
 
-function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCardData["movement"]): ProductCardData {
+function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCardData["movement"], sourceModes: unknown): ProductCardData {
   const { best } = group;
   const verdict = rankingVerdict({
     trend: best.breakdown.trend,
@@ -84,7 +88,7 @@ function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCar
     chips: group.countries.map((c) => `${c.country} ${c.score}`),
     delivery: deliveryBadge(best),
     movement,
-    externalUrl: best.product.url,
+    external: offerLink(best.product, sourceModes, best.keyword),
   };
 }
 
@@ -104,7 +108,7 @@ function cardFromCheck(check: CheckRow): ProductCardData {
     ],
     chips: [check.country],
     badge: `Merkliste: ${STAGE_LABELS[check.stage]}`,
-    externalUrl: check.url,
+    external: check.url ? { url: check.url, label: "Angebot" } : null,
   };
 }
 
@@ -117,12 +121,15 @@ function sortManual(rows: CheckRow[], sort: SortKey): CheckRow[] {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const filters = parseFilters(await searchParams);
   const [run, manualInCountry] = await Promise.all([getLatestRun(), getProductChecks({ country: filters.country })]);
+  // Echter Lauf: Angebote aus Demo-Quellen (erfundene Produkte) ausblenden
+  const hidden = run ? hiddenDemoSources(run.sourceModes) : [];
+  const hiddenSupply = hidden.filter((id) => SUPPLY_SOURCES.includes(id));
   const manual = sortManual(
     manualInCountry.filter((c) => !filters.category || c.category === filters.category),
     filters.sort,
   );
   const [rows, categoryCounts] = run
-    ? await Promise.all([getCandidates(run.id, filters), getCategoryCounts(run.id, filters.country)])
+    ? await Promise.all([getCandidates(run.id, filters, hidden), getCategoryCounts(run.id, filters.country, hidden)])
     : [[] as CandidateRow[], new Map<string, number>()];
   for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
   const allGroups = groupCandidates(
@@ -132,7 +139,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   // „Neu diese Woche“: Vergleich mit dem Lauf von vor mindestens `compareMinDaysBack` Tagen.
   const comparison = run ? await getComparisonRun(run) : null;
-  const previous = comparison ? indexPrevious(await getPreviousCandidates(comparison.id, filters.country)) : null;
+  const previous = comparison ? indexPrevious(await getPreviousCandidates(comparison.id, filters.country, hiddenDemoSources(comparison.sourceModes))) : null;
   const movements = new Map(allGroups.map((g) => [g.best.id, previous ? groupMovement(g.rows, previous) : null]));
   const moved = allGroups.filter((g) => movements.get(g.best.id));
   const newCount = moved.filter((g) => movements.get(g.best.id)?.kind === "neu").length;
@@ -159,6 +166,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           ) : (
             <p className="text-sm text-muted-foreground">Noch kein Datenlauf. Eigene Produkte prüfst du im Produkt-Check.</p>
           )}
+          {hiddenSupply.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Ausgeblendet: Demo-Angebote von {hiddenSupply.map((id) => sourceLabel(id)).join(" und ")} – diese Produkte gibt es nicht. Sie erscheinen echt, sobald die Zugänge
+              eingetragen sind.
+            </p>
+          ) : null}
           {run ? (
             <p className="text-sm text-muted-foreground">
               {comparison
@@ -207,7 +220,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             )}
             <ul className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
               {groups.map((group) => (
-                <ProductCard key={group.best.id} data={cardFromGroup(group, comparison ? movementBadge(movements.get(group.best.id) ?? null, comparison.startedAt) : null)} />
+                <ProductCard
+                  key={group.best.id}
+                  data={cardFromGroup(group, comparison ? movementBadge(movements.get(group.best.id) ?? null, comparison.startedAt) : null, run?.sourceModes)}
+                />
               ))}
             </ul>
           </section>
@@ -219,6 +235,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />}
               title="Diese Woche nichts Neues"
               text="Kein neues oder deutlich gestiegenes Produkt für diese Filter. Schalte „Neu diese Woche“ aus, um alle zu sehen."
+            />
+          ) : run && hiddenSupply.length > 0 && !filters.country && !filters.category ? (
+            <EmptyState
+              icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />}
+              title="Noch keine echten Angebote"
+              text={`Der letzte echte Lauf hat keine Angebote aus echten Quellen gefunden. Demo-Angebote (${hiddenSupply.map((id) => sourceLabel(id)).join(", ")}) werden ausgeblendet, weil es diese Produkte nicht gibt. Sobald die AliExpress-Keys eingetragen sind, füllt der nächste Lauf die Liste.`}
             />
           ) : run ? (
             <EmptyState icon={<SearchX className="size-10" strokeWidth={1.5} aria-hidden="true" />} title="Keine Produkte für diese Filter" text="Wähle ein anderes Land oder eine andere Kategorie." />

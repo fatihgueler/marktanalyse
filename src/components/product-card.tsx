@@ -40,7 +40,8 @@ export interface ProductCardData {
   delivery?: { label: string; slow: boolean; title: string } | null;
   /** „Neu“ oder „+12 Punkte“ gegenüber dem Vergleichslauf */
   movement?: { label: string; title: string } | null;
-  externalUrl?: string | null;
+  /** Link zum Angebot; bei Demo-Angeboten die Suche beim Anbieter („Ähnliche suchen“) */
+  external?: { url: string; label: string } | null;
 }
 
 /** Produktbild der Quelle oder ein neutraler Platzhalter – es werden keine neuen Bildquellen angebunden. */
@@ -113,14 +114,14 @@ export function ProductCard({ data }: { data: ProductCardData }) {
             </span>
           ))}
           {data.badge ? <span className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground">{data.badge}</span> : null}
-          {data.externalUrl ? (
+          {data.external ? (
             <a
-              href={data.externalUrl}
+              href={data.external.url}
               target="_blank"
               rel="noopener noreferrer"
               className="relative z-10 ml-auto inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              Angebot <ArrowUpRight className="size-3.5" aria-hidden="true" />
+              {data.external.label} <ArrowUpRight className="size-3.5" aria-hidden="true" />
               <span className="sr-only">(öffnet in neuem Tab)</span>
             </a>
           ) : null}

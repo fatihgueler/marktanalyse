@@ -33,13 +33,31 @@ export function parseFilters(params: Record<string, string | string[] | undefine
   };
 }
 
-/** Letzter abgeschlossener Lauf mit Ergebnissen. */
+/**
+ * Lauf, den das Dashboard zeigt: der letzte abgeschlossene Lauf mit echten Quellen, sonst der letzte Demo-Lauf.
+ * Ein neuerer Demo-Lauf (z. B. lokal oder beim ersten Start) soll echte Ergebnisse nicht verdrängen.
+ */
 export async function getLatestRun() {
-  return getDb().run.findFirst({
+  const runs = await getDb().run.findMany({
     where: { status: { in: ["SUCCEEDED", "PARTIAL"] }, finishedAt: { not: null } },
     orderBy: { startedAt: "desc" },
+    take: 50,
     include: { _count: { select: { candidates: true, demandSignals: true } } },
   });
+  return runs.find((run) => isLiveOperation(run.sourceModes as Record<string, string>)) ?? runs[0] ?? null;
+}
+
+/**
+ * Quellen, deren Angebote in einem echten Lauf nicht gezeigt werden: Sie liefen im Demo-Modus und erfinden
+ * Produkte (Links führen ins Leere). Ältere Läufe mischten Demo-Angebote noch unter echte Trends.
+ * Reine Demo-Läufe zeigen alles – dort ist alles erkennbar Demo.
+ */
+export function hiddenDemoSources(sourceModes: unknown): string[] {
+  const modes = sourceModes as Record<string, string>;
+  if (!isLiveOperation(modes)) return [];
+  return Object.entries(modes)
+    .filter(([, mode]) => mode === "mock")
+    .map(([id]) => id);
 }
 
 /**
@@ -60,9 +78,9 @@ export async function getComparisonRun(run: { startedAt: Date; sourceModes: unkn
 }
 
 /** Kandidaten eines früheren Laufs für den Vergleich – nur Land, Produkt, Keyword und Score. */
-export async function getPreviousCandidates(runId: string, country: Country | null) {
+export async function getPreviousCandidates(runId: string, country: Country | null, hiddenSources: readonly string[] = []) {
   return getDb().candidateSnapshot.findMany({
-    where: { runId, ...(country ? { country } : {}) },
+    where: { runId, ...(country ? { country } : {}), ...(hiddenSources.length > 0 ? { product: { source: { notIn: [...hiddenSources] } } } : {}) },
     select: { productId: true, keyword: true, country: true, totalScore: true },
   });
 }
@@ -79,10 +97,11 @@ const ORDER_BY: Record<SortKey, Prisma.CandidateSnapshotOrderByWithRelationInput
 
 const CANDIDATE_LIMIT = 200;
 
-export async function getCandidates(runId: string, filters: CandidateFilters) {
+export async function getCandidates(runId: string, filters: CandidateFilters, hiddenSources: readonly string[] = []) {
   const rows = await getDb().candidateSnapshot.findMany({
     where: {
       runId,
+      ...(hiddenSources.length > 0 ? { product: { source: { notIn: [...hiddenSources] } } } : {}),
       ...(filters.country ? { country: filters.country } : {}),
       ...(filters.category ? { category: filters.category } : {}),
     },
@@ -110,10 +129,10 @@ export async function getCandidates(runId: string, filters: CandidateFilters) {
 export type CandidateRow = Awaited<ReturnType<typeof getCandidates>>[number];
 
 /** Kategorien mit Anzahl im Lauf (für den Filter), respektiert den Länderfilter. */
-export async function getCategoryCounts(runId: string, country: Country | null): Promise<Map<string, number>> {
+export async function getCategoryCounts(runId: string, country: Country | null, hiddenSources: readonly string[] = []): Promise<Map<string, number>> {
   const groups = await getDb().candidateSnapshot.groupBy({
     by: ["category"],
-    where: { runId, ...(country ? { country } : {}) },
+    where: { runId, ...(country ? { country } : {}), ...(hiddenSources.length > 0 ? { product: { source: { notIn: [...hiddenSources] } } } : {}) },
     _count: { _all: true },
   });
   return new Map(groups.map((g) => [g.category, g._count._all]));

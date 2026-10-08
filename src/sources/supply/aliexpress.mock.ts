@@ -47,7 +47,8 @@ export class AliExpressMockSource implements SupplySource {
         externalId,
         keyword,
         title,
-        url: `https://www.aliexpress.com/item/${externalId}.html`,
+        // Demo: keine erfundene Artikelseite (wäre ein 404), sondern die echte Suche nach dem Keyword
+        url: `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(keyword)}`,
         imageUrl: null,
         price,
         currency: "EUR",
