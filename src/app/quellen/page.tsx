@@ -22,7 +22,7 @@ const SOURCES: { id: string; role: string; vars: string; cost: string; required?
   { id: "google-shopping", role: "Verkaufspreis", vars: "SERPAPI_API_KEY", cost: "in SerpApi enthalten", required: true },
   { id: "meta-ad-library", role: "Werbedruck (DE, AT)", vars: "META_ACCESS_TOKEN, META_APP_ID, META_APP_SECRET", cost: "kostenlos" },
   { id: "tiktok-ads", role: "Werbedruck (DE, AT)", vars: "TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET", cost: "kostenlos" },
-  { id: "claude", role: "Matching und Übersetzung", vars: "ANTHROPIC_API_KEY", cost: "ca. 3 $/Monat", required: true },
+  { id: "claude", role: "Matching und Übersetzung", vars: "ANTHROPIC_API_KEY", cost: "unter 1 $/Monat", required: true },
   { id: "ezb-kurse", role: "Wechselkurse", vars: "keine", cost: "kostenlos" },
 ];
 

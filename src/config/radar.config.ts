@@ -145,14 +145,17 @@ export const radarConfig = {
   matching: {
     /** Paare darunter werden nicht gescort */
     minRelevance: 0.6,
-    /** Obergrenze Ausgabe-Tokens pro Claude-Request (Klassifikation von bis zu 8 Produkten) */
-    maxOutputTokens: 4000,
+    /**
+     * Obergrenze Ausgabe-Tokens pro Claude-Request (Klassifikation der Treffer eines Keywords).
+     * Enthält bei Haiku 5.5 auch die Denk-Tokens – daher mit Reserve.
+     */
+    maxOutputTokens: 8000,
     /**
      * Denktiefe für Claude (`output_config.effort`). Reine Klassifikation → "low".
      * Wird bei Modellen ohne Effort-Unterstützung automatisch weggelassen (siehe modelsWithoutEffort).
      */
     effort: "low" as "low" | "medium" | "high" | null,
-    /** Modell-Präfixe, die `effort` mit einem Fehler ablehnen (u. a. das Standardmodell Haiku 4.5) */
+    /** Modell-Präfixe, die `effort` mit einem Fehler ablehnen (ältere Modelle, nur bei ANTHROPIC_MODEL relevant) */
     modelsWithoutEffort: ["claude-haiku-4-5", "claude-sonnet-4-5"],
     /**
      * Heuristik: Zubehör-/Ersatzteil-Erkennung → Relevanz halbiert, wenn der Begriff nicht im Keyword steht.

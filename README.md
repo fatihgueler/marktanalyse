@@ -70,7 +70,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `ALIEXPRESS_APP_SECRET` | nein | App Secret |
 | `ALIEXPRESS_TRACKING_ID` | nein | Affiliate-Tracking-ID. Alle drei AliExpress-Werte nötig, sonst Demo-Modus. |
 | `ANTHROPIC_API_KEY` | nein | Claude für das Matching. Leer → heuristisches Matching. |
-| `ANTHROPIC_MODEL` | nein | Modell für Matching, Hashtag-Auswahl und Übersetzung. Standard `claude-haiku-4-5` (am günstigsten); bei schwacher Match-Qualität `claude-sonnet-5`. |
+| `ANTHROPIC_MODEL` | nein | Modell für Matching, Hashtag-Auswahl und Übersetzung. Standard `claude-haiku-5-5` (am günstigsten); bei schwacher Match-Qualität `claude-sonnet-5-5`. |
 | `META_ACCESS_TOKEN` | nein | Meta Ad Library API, langlebiger Token (60 Tage). Leer → Demo-Modus. |
 | `META_APP_ID`, `META_APP_SECRET` | nein | Nur für die Warnung, bevor der Meta-Token abläuft |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | nein | TikTok Commercial Content API, nach Zulassung durch TikTok. Leer → Demo-Modus. |
@@ -87,7 +87,7 @@ Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei 
 | Schritt | Dienst | Kosten | Vorlauf | Variable(n) |
 |---|---|---|---|---|
 | 1 | [SerpApi](https://serpapi.com/pricing) Starter | 25 $/Monat | sofort | `SERPAPI_API_KEY` |
-| 2 | [Anthropic Console](https://console.anthropic.com), Guthaben aufladen (z. B. 10 $) | ca. 3 $/Monat | sofort | `ANTHROPIC_API_KEY` |
+| 2 | [Anthropic Console](https://console.anthropic.com), Guthaben aufladen (z. B. 10 $) | unter 1 $/Monat | sofort | `ANTHROPIC_API_KEY` |
 | 3 | [AliExpress Open Platform](https://openservice.aliexpress.com), Affiliate-App | kostenlos | einige Tage (Prüfung der App) | `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET`, `ALIEXPRESS_TRACKING_ID` |
 | 4 | [Apify](https://apify.com), Gratis-Plan | 0 $ (5 $ Guthaben/Monat) | sofort | `APIFY_TOKEN` |
 | 5 | Meta Ad Library (Identitätsprüfung + App) | kostenlos | 1–3 Tage (Ausweisprüfung) | `META_ACCESS_TOKEN`, `META_APP_ID`, `META_APP_SECRET` |
@@ -110,7 +110,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 
 1. **Google Trends + Google Shopping:** Account bei SerpApi anlegen, `SERPAPI_API_KEY` setzen. Genutzt werden `engine=google_trends` (steigende verwandte Suchanfragen und 12-Monats-Zeitreihe je Keyword) und `engine=google_shopping` (Median der Endkundenpreise).
 2. **AliExpress:** Auf der AliExpress Open Platform eine App mit Zugriff auf die **Affiliate API** anlegen (Methoden `aliexpress.affiliate.product.query` und `aliexpress.affiliate.product.shipping.get`), dann `ALIEXPRESS_APP_KEY`, `ALIEXPRESS_APP_SECRET` und `ALIEXPRESS_TRACKING_ID` setzen. Für die 5 meistverkauften Treffer je Suche (`supply.shippingLookupsPerSearch`) holt der Radar kostenlos die echten Versandkosten und die Lieferzeit ins Zielland; alle anderen rechnen mit der Pauschale `shipping.perItemEur`. Schlägt die Versandabfrage fehl, gilt ebenfalls die Pauschale, und der Lauf meldet es als Hinweis. `npm run check` prüft eine Versandabfrage mit.
-3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Der Parameter `effort` wird bei Modellen, die ihn nicht kennen (z. B. dem Standard Haiku 4.5), automatisch weggelassen.
+3. **Claude:** `ANTHROPIC_API_KEY` setzen, optional `ANTHROPIC_MODEL`. Standard ist Haiku 5.5 (0,10 $ / 0,50 $ je Million Token bei Prompts bis 100.000 Token) mit `effort` „low“ – es denkt kurz mit, die Denk-Tokens zählen zu den Ausgabe-Grenzen. Bei Modellen, die `effort` nicht kennen (z. B. Haiku 4.5), wird der Parameter automatisch weggelassen.
 4. **Meta Ad Library (kostenlos, aber mit Rate-Limit):**
    1. Auf [facebook.com/ID](https://www.facebook.com/ID) die Identität bestätigen (Pflicht für den Zugriff auf die Ad Library API).
    2. Auf [developers.facebook.com](https://developers.facebook.com) eine App anlegen.
@@ -173,7 +173,7 @@ Die Config ist auf die günstigste Variante eingestellt, die rund 500 Kandidaten
 | Dienst | Plan | Monatlich |
 |---|---|---|
 | SerpApi (Google Trends + Shopping) | Starter, 1.000 Suchen | 25 $ |
-| Claude | `claude-haiku-4-5`, nach Verbrauch | ca. 3 $ |
+| Claude | `claude-haiku-5-5`, nach Verbrauch | unter 1 $ |
 | Apify (TikTok Creative Center, 1688) | Gratis-Plan, 5 $ Guthaben | 0 $ |
 | Railway (Dashboard, Datenbank, Cron) | Hobby | ca. 5–10 $ |
 | AliExpress, Pinterest, EZB-Kurse, Meta Ad Library, TikTok Ad Library | kostenlos | 0 $ |

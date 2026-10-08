@@ -25,7 +25,8 @@ export class ClaudeKeywordTranslator {
     if (cached) return cached;
     const response = await this.client.messages.parse({
       model: this.model,
-      max_tokens: 200,
+      // Platz für die Denk-Tokens von Haiku 5.5 plus den kurzen Begriff
+      max_tokens: 1024,
       system:
         "Übersetze den Produkt-Suchbegriff in den vereinfacht-chinesischen Begriff, unter dem Großhändler auf 1688.com dieses Produkt führen. Nur der Suchbegriff, keine Marke, 2–8 Zeichen.",
       messages: [{ role: "user", content: keyword }],
