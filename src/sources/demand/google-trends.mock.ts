@@ -21,6 +21,12 @@ function risingSignal(values: number[]): string | null {
   return growthPct > BREAKOUT_PCT ? "Breakout" : `+${growthPct} %`;
 }
 
+/** Typische unbrauchbare „rising“-Begriffe aus dem ersten Live-Lauf (09.10.2026) */
+const NOISE = {
+  de: ["ikea herbst deko", "herbst deko basteln", "wie funktioniert ein luftbefeuchter", "luftbefeuchter test"],
+  en: ["ikea fado lamp", "philips hue floor lamp", "how to clean led strip lights", "star wars lamp"],
+} as const;
+
 export class GoogleTrendsMockSource implements TrendSource {
   readonly id = "google-trends";
   readonly label = "Google Trends";
@@ -42,6 +48,12 @@ export class GoogleTrendsMockSource implements TrendSource {
         if (!signal) continue;
         found.set(keyword, { keyword, seedTerm: seed, signal });
       }
+    }
+    // Wie im echten Lauf: Google listet unter „rising“ auch Marken, Anleitungen und Tests –
+    // der Keyword-Filter muss sie vor den (kostenpflichtigen) Trendkurven aussortieren.
+    const seed = seeds[0];
+    for (const keyword of seed ? NOISE[country === "GB" ? "en" : "de"] : []) {
+      if (!found.has(keyword)) found.set(keyword, { keyword, seedTerm: seed!, signal: "+120 %" });
     }
     return [...found.values()];
   }

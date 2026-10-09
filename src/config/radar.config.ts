@@ -126,6 +126,46 @@ export const radarConfig = {
     discoveryTimeframe: "today 3-m",
   },
 
+  /**
+   * Keyword-Filter VOR den Trendkurven: Jede Google-Trends-Kurve kostet eine SerpApi-Suche. Begriffe,
+   * die kein importierbares Produkt sind, fliegen vorher raus – erst per Regel (kostenlos), dann per
+   * Claude (ein gebündelter Aufruf je Land und Quelle). Begriffe werden als ganze Wörter verglichen;
+   * chinesische Einträge (für 1688-Titel) als Teilstring.
+   */
+  keywordFilter: {
+    /** ANNAHME: Händler und Marken, deren Suchbegriffe auf deren Sortiment zielen statt auf ein Produkt */
+    brands: [
+      "ikea", "lidl", "aldi", "dunelm", "m&s", "marks and spencer", "philips hue", "leroy merlin", "jysk", "tchibo", "kik", "primark",
+      "temu", "shein", "amazon", "obi", "bauhaus", "hornbach", "depot", "xxxlutz", "rossmann", "h&m", "zara", "argos", "b&m",
+      "the range", "tesco", "asda", "sainsbury", "wilko", "home bargains", "kmart", "walmart", "costco", "apple", "samsung", "dyson",
+      "govee", "nanoleaf", "lego", "loberon", "pagro",
+    ],
+    /** Fragen – nur als erstes Wort */
+    questionWords: ["how", "what", "why", "where", "when", "which", "who", "wie", "was", "warum", "wo", "wann", "welche", "welcher", "welches", "wer"],
+    /** Selbermachen und Anleitungen statt fertiger Produkte */
+    diy: ["basteln", "selber machen", "selbst machen", "selbermachen", "ideen", "idee", "diy", "anleitung", "tutorial", "vorlage", "ausmalbild", "craft", "crafts", "ideas", "template", "printable"],
+    /** Tests, Vergleiche und Bestenlisten */
+    reviewCompare: ["test", "testsieger", "vergleich", "erfahrungen", "bewertung", "review", "reviews", "vs", "versus", "compare", "comparison", "best", "beste", "bester", "bestes", "stiftung warentest", "worth it"],
+    /** Filme, Serien, Spiele, Musik, Rätsel */
+    media: [
+      "film", "movie", "kinofilm", "serie", "series", "staffel", "episode", "trailer", "netflix", "crossword", "kreuzworträtsel", "lyrics", "songtext",
+      "album", "konzert", "concert", "pokemon go", "videospiel", "video game", "playstation", "xbox", "nintendo switch", "besetzung",
+    ],
+    /** Lizenzware – ohne Lizenz nicht verkäuflich (Markenrecht). Gilt für Keywords und Angebotstitel. */
+    licenses: [
+      "star wars", "disney", "marvel", "pokémon", "pokemon", "harry potter", "barbie", "hello kitty", "minecraft", "fortnite", "super mario",
+      "frozen", "paw patrol", "peppa", "spiderman", "spider-man", "batman", "avengers", "stranger things", "stitch", "sanrio", "kuromi",
+      "naruto", "one piece", "dragon ball", "squishmallows", "labubu",
+      "星球大战", "迪士尼", "漫威", "宝可梦", "精灵宝可梦", "哈利波特", "芭比", "凯蒂猫", "我的世界", "马里奥", "冰雪奇缘", "蜘蛛侠", "三丽鸥", "库洛米", "海贼王", "火影", "泡泡玛特",
+    ],
+    /** Quellen, deren Begriffe Claude zusätzlich prüft. TikTok und Pinterest prüft Claude schon beim Erkennen der Produkt-Hashtags. */
+    claudeCheckSources: ["google-trends"],
+    /** Begriffe je Claude-Aufruf */
+    claudeBatchSize: 80,
+    /** So viele verworfene Beispiele je Land und Quelle stehen im Log */
+    logExamples: 5,
+  },
+
   supply: {
     /**
      * Treffer je Keyword/Land und Angebotsquelle. AliExpress ist kostenlos – mehr Treffer bringen mehr

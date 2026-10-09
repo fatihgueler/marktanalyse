@@ -14,6 +14,8 @@ import { mapWithConcurrency } from "@/lib/concurrency";
 import { getDb } from "@/lib/db";
 import { readCollectEnv } from "@/lib/env";
 import { round } from "@/lib/stats";
+import { createKeywordClassifier, type KeywordProductClassifier } from "@/matching/keyword-classifier";
+import { gateKeywords, type KeywordGateResult } from "@/matching/keyword-gate";
 import { createJudge, matchProducts, type JudgmentCache } from "@/matching/match";
 import type { Judgment, MatchJudge } from "@/matching/types";
 import { combineAdSignals } from "@/scoring/ads";
@@ -44,6 +46,7 @@ interface RunContext {
   config: RadarConfig;
   fx: FxInfo;
   judge: MatchJudge;
+  keywordClassifier: KeywordProductClassifier;
   errors: RunError[];
   stats: { discovered: number; keywords: number; qualified: number; offers: number; candidates: number };
 }
@@ -144,6 +147,24 @@ interface ScoredDemand {
   trend: TrendBreakdown;
 }
 
+/** Log: vorher/nachher je Land und Quelle plus einige verworfene Beispiele mit Grund. */
+function logKeywordGate(sourceId: string, country: Country, found: number, gate: KeywordGateResult, requested: number, claudeChecked: boolean): void {
+  const byRule = gate.rejected.filter((r) => r.by === "regel").length;
+  const byClaude = gate.rejected.length - byRule;
+  const limit = radarConfig.demand.maxKeywordsPerCountry;
+  console.log(
+    `  Keyword-Filter ${country} · ${sourceId}: ${found} gefunden → ${found - byRule} nach Regeln` +
+      (claudeChecked ? ` → ${gate.kept.length} nach Claude` : "") +
+      ` → ${requested} abgefragt${gate.kept.length > limit ? ` (Limit ${limit})` : ""}`,
+  );
+  const n = radarConfig.keywordFilter.logExamples;
+  const rules = gate.rejected.filter((r) => r.by === "regel");
+  const claude = gate.rejected.filter((r) => r.by === "claude");
+  const examples = [...rules.slice(0, Math.ceil(n / 2)), ...claude].slice(0, n);
+  if (examples.length < n) examples.push(...rules.slice(Math.ceil(n / 2), Math.ceil(n / 2) + n - examples.length));
+  for (const r of examples) console.log(`    verworfen: „${r.keyword}“ – ${r.by === "claude" ? "Claude: " : ""}${r.reason}`);
+}
+
 async function collectDemand(ctx: RunContext, source: TrendSource, country: Country): Promise<ScoredDemand[]> {
   const seeds = radarConfig.demand.seeds[country].slice(0, radarConfig.demand.maxSeedsPerCountry);
   let discovered;
@@ -153,9 +174,21 @@ async function collectDemand(ctx: RunContext, source: TrendSource, country: Coun
     ctx.errors.push({ source: source.id, country, message: `Keyword-Entdeckung: ${errorMessage(error)}` });
     return [];
   }
-  const keywords = discovered.slice(0, radarConfig.demand.maxKeywordsPerCountry);
-  ctx.stats.discovered += keywords.length;
+  // Keyword-Filter VOR den Trendkurven – jede Kurve kostet bei Google Trends eine SerpApi-Suche.
+  const useClaude = radarConfig.keywordFilter.claudeCheckSources.includes(source.id);
+  const gate = await gateKeywords(
+    discovered.map((d) => d.keyword),
+    country,
+    useClaude ? ctx.keywordClassifier : null,
+  );
+  if (gate.claudeError) {
+    ctx.errors.push({ level: "warnung", source: "claude", country, message: `Keyword-Prüfung fehlgeschlagen, alle regelkonformen Begriffe bleiben drin: ${gate.claudeError}` });
+  }
+  const kept = new Set(gate.kept);
+  const keywords = discovered.filter((d) => kept.has(d.keyword)).slice(0, radarConfig.demand.maxKeywordsPerCountry);
+  ctx.stats.discovered += discovered.length;
   ctx.stats.keywords += keywords.length;
+  logKeywordGate(source.id, country, discovered.length, gate, keywords.length, useClaude && ctx.keywordClassifier.mode === "live");
 
   const results = await mapWithConcurrency(keywords, radarConfig.collect.concurrency, async ({ keyword, seedTerm }) => {
     try {
@@ -584,6 +617,7 @@ async function main(): Promise<number> {
     config: withFx(radarConfig, fx),
     fx,
     judge,
+    keywordClassifier: createKeywordClassifier(env),
     errors: [...warnings],
     stats: { discovered: 0, keywords: 0, qualified: 0, offers: 0, candidates: 0 },
   };
