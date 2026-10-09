@@ -60,6 +60,8 @@ export interface DemandRecord extends SourceRecord {
 }
 
 export interface TrendSource extends SourceBase {
+  /** true = jede Zeitreihe kostet eine Suche aus dem SerpApi-Budget (Google Trends) */
+  readonly usesSerpApiBudget?: boolean;
   /** Neue, steigende Keywords rund um die Seeds finden. */
   discoverKeywords(seeds: string[], country: Country): Promise<DiscoveredKeyword[]>;
   /** Zeitreihe für ein Keyword laden (einzeln, damit die 0..100-Normierung nur vom Keyword selbst abhängt). */
@@ -113,6 +115,8 @@ export interface PriceTier {
 export interface SupplySource extends SourceBase {
   /** Kostenbremse: höchstens so viele Suchen je Land und Lauf (die Keywords mit dem höchsten Trend-Score zuerst) */
   readonly maxSearchesPerCountry?: number;
+  /** Länder, in die diese Quelle liefert; fehlt = alle */
+  readonly countries?: readonly Country[];
   search(keyword: string, shipTo: Country, limit: number): Promise<SupplyRecord[]>;
 }
 

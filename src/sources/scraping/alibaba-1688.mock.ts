@@ -17,6 +17,7 @@ export class Alibaba1688MockSource implements SupplySource {
   readonly id = "alibaba-1688";
   readonly label = "1688";
   readonly maxSearchesPerCountry = radarConfig.scraping.alibaba1688.maxSearchesPerCountry;
+  readonly countries = radarConfig.wholesale.countries;
   readonly mode = "mock" as const;
 
   async search(keyword: string, shipTo: Country, limit: number): Promise<SupplyRecord[]> {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { perRunBudget, worstCaseApifyUsd, worstCaseSerpApiSearches, validateConfig } from "@/config/config-check";
+import { minimumSerpApiSearches, perRunBudget, worstCaseApifyUsd, worstCaseSerpApiSearches, validateConfig } from "@/config/config-check";
 import { radarConfig } from "@/config/radar.config";
 import { makeTestConfig } from "@/scoring/test-config";
-import { SearchBudget, quotaDecision } from "./budget";
+import { SearchBudget, countryShare, quotaDecision } from "./budget";
 
 describe("SearchBudget", () => {
   it("gibt genau `limit` Aufrufe frei", () => {
@@ -13,19 +13,41 @@ describe("SearchBudget", () => {
     expect(() => budget.take()).toThrow(/Budget/);
     expect(budget.consumed).toBe(2);
   });
+
+  it("hält eine Zwischengrenze ein und gibt danach den Rest frei", () => {
+    const budget = new SearchBudget("Test", 10);
+    budget.take();
+    budget.setCeiling(3);
+    expect(budget.available).toBe(2);
+    expect([budget.tryTake(), budget.tryTake(), budget.tryTake()]).toEqual([true, true, false]);
+    budget.setCeiling(null);
+    expect(budget.available).toBe(7);
+  });
+});
+
+describe("countryShare", () => {
+  it("verteilt das Restbudget auf die verbleibenden Länder und reserviert Shopping", () => {
+    // 230 Suchen, zwei Länder (DE, AT): DE bekommt 115, davon höchstens 107 für Trends
+    expect(countryShare(230, 2, 8)).toEqual({ share: 115, trendCap: 107 });
+    // DE hat nur 70 gebraucht → AT bekommt den ganzen Rest
+    expect(countryShare(160, 1, 8)).toEqual({ share: 160, trendCap: 152 });
+    expect(countryShare(5, 1, 8)).toEqual({ share: 5, trendCap: 0 });
+  });
 });
 
 describe("Kostenrahmen der Config", () => {
   it("die ausgelieferte Config bleibt im Budget (SerpApi Starter, Apify Gratis)", () => {
     const budget = perRunBudget(radarConfig);
     expect(budget.serpApiSearches).toBe(230); // 1.000 ÷ 4,33
-    expect(worstCaseSerpApiSearches(radarConfig)).toBeLessThanOrEqual(budget.serpApiSearches);
+    expect(minimumSerpApiSearches(radarConfig)).toBeLessThanOrEqual(budget.serpApiSearches);
     expect(worstCaseApifyUsd(radarConfig)).toBeLessThanOrEqual(budget.apifyUsd);
   });
 
-  it("rechnet den ungünstigsten SerpApi-Verbrauch nach (Handrechnung)", () => {
-    // Seeds: DE 8 + AT 6 + CH 6 + GB 8 = 28; Kurven 4 × 45 = 180; Preise 4 × 5 = 20
-    expect(worstCaseSerpApiSearches(radarConfig)).toBe(228);
+  it("rechnet den SerpApi-Verbrauch nach (Handrechnung)", () => {
+    // Seeds: DE 8 + AT 6 + CH 6 + GB 8 = 28; reservierte Preise 4 × 8 = 32
+    expect(minimumSerpApiSearches(radarConfig)).toBe(60);
+    // ohne Budgetgrenze: 28 + 4 × (45 Kurven + 45 Preise) – die harte Grenze von 230 greift vorher
+    expect(worstCaseSerpApiSearches(radarConfig)).toBe(388);
   });
 
   it("lehnt eine Config ab, die das SerpApi-Budget sprengen kann", () => {

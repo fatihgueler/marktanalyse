@@ -27,12 +27,17 @@ export function validateConfig(config: RadarConfig = radarConfig): void {
     throw new Error("Config: trend.minSeriesWeeks muss größer als recentWeeks + previousWeeks sein.");
   }
   const budget = perRunBudget(config);
-  const serp = worstCaseSerpApiSearches(config);
+  // Mehr als das Budget verbraucht ein Lauf nie (harte Grenze in SearchBudget); prüfen muss die Config nur,
+  // dass Entdeckung und die reservierten Shopping-Suchen hineinpassen.
+  const serp = minimumSerpApiSearches(config);
   if (serp > budget.serpApiSearches) {
     throw new Error(
-      `Config: Ein Lauf kann bis zu ${serp} SerpApi-Suchen verbrauchen, das Budget erlaubt ${budget.serpApiSearches} ` +
-        "(budget.serpApiMonthlySearches ÷ runsPerMonth). demand.maxKeywordsPerCountry oder referencePrice.maxLookupsPerCountry senken.",
+      `Config: Entdeckung und reservierte Shopping-Preise brauchen ${serp} SerpApi-Suchen, das Budget erlaubt ${budget.serpApiSearches} ` +
+        "(budget.serpApiMonthlySearches ÷ runsPerMonth). demand.maxSeedsPerCountry oder referencePrice.minLookupsPerCountry senken.",
     );
+  }
+  if (config.referencePrice.minLookupsPerCountry > config.referencePrice.maxLookupsPerCountry) {
+    throw new Error("Config: referencePrice.minLookupsPerCountry darf nicht größer als maxLookupsPerCountry sein.");
   }
   const apify = worstCaseApifyUsd(config);
   if (apify > budget.apifyUsd + 1e-9) {
@@ -46,11 +51,22 @@ export function validateConfig(config: RadarConfig = radarConfig): void {
   }
 }
 
-/** Höchstzahl SerpApi-Suchen, die ein Lauf laut Config verbrauchen kann (Entdeckung + Kurven + Preise). */
-export function worstCaseSerpApiSearches(config: RadarConfig = radarConfig): number {
+function seedSearches(config: RadarConfig): { seeds: number; countries: number } {
   const countries = Object.keys(config.countries) as (keyof RadarConfig["countries"])[];
   const seeds = countries.reduce((sum, c) => sum + Math.min(config.demand.seeds[c].length, config.demand.maxSeedsPerCountry), 0);
-  return seeds + countries.length * (config.demand.maxKeywordsPerCountry + config.referencePrice.maxLookupsPerCountry);
+  return { seeds, countries: countries.length };
+}
+
+/** SerpApi-Suchen ohne Budgetgrenze, wenn alle vier Länder alles ausschöpfen (Entdeckung + Kurven + Preise). */
+export function worstCaseSerpApiSearches(config: RadarConfig = radarConfig): number {
+  const { seeds, countries } = seedSearches(config);
+  return seeds + countries * (config.demand.maxKeywordsPerCountry + config.referencePrice.maxLookupsPerCountry);
+}
+
+/** Was ein Lauf mindestens unterbringen muss: Entdeckung aller Seeds + reservierte Shopping-Suchen je Land. */
+export function minimumSerpApiSearches(config: RadarConfig = radarConfig): number {
+  const { seeds, countries } = seedSearches(config);
+  return seeds + countries * config.referencePrice.minLookupsPerCountry;
 }
 
 /** Höchstbetrag Apify je Lauf laut Config (alle Kostengrenzen ausgeschöpft). */

@@ -249,6 +249,23 @@ const SEED_GROUPS: Record<string, SeedGroup> = {
   "tiktok produkt": "tiktok",
   "tiktok made me buy it": "tiktok",
   "beauty tool": "beauty",
+  // Seeds seit 09.10.2026 (konkrete Produktkategorien) → dieselben Demo-Gruppen
+  nachtlicht: "lamp",
+  "night light": "lamp",
+  luftbefeuchter: "decor",
+  humidifier: "decor",
+  "schreibtisch organizer": "gadget",
+  "desk organiser": "gadget",
+  "massagegerät": "beauty",
+  "massage gun": "beauty",
+  "mini projektor": "led",
+  "mini projector": "led",
+  handyhalterung: "tiktok",
+  "phone holder": "tiktok",
+  "küche aufbewahrung": "kitchen",
+  "kitchen storage": "kitchen",
+  gesichtsroller: "gift",
+  "face roller": "gift",
 };
 
 export function seedGroupOf(seed: string): SeedGroup | undefined {

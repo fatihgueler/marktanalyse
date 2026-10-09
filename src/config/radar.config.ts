@@ -109,13 +109,15 @@ export const radarConfig = {
   demand: {
     /**
      * Seed-Begriffe für die Suche nach steigenden Keywords („rising related queries“).
-     * ANNAHME: breite Produktbegriffe aus nexanas Sortimentsrichtung (Gadgets, Deko, Küche, Beauty).
+     * Konkrete Produktkategorien statt Sammelbegriffen: „gadget“, „led“, „deko“ und „geschenkidee“ lieferten
+     * im ersten Live-Lauf vor allem Marken, Saisonware und Bastelideen. Freigegeben am 09.10.2026.
+     * CH und GB laufen nur, wenn eine Angebotsquelle dorthin liefert (heute nur AliExpress).
      */
     seeds: {
-      DE: ["gadget", "lampe", "küchenhelfer", "deko", "led", "geschenkidee", "tiktok produkt", "beauty tool"],
-      AT: ["gadget", "lampe", "küchenhelfer", "deko", "led", "geschenkidee"],
-      CH: ["gadget", "lampe", "küchenhelfer", "deko", "led", "geschenkidee"],
-      GB: ["gadget", "lamp", "kitchen gadget", "home decor", "led", "gift idea", "tiktok made me buy it", "beauty tool"],
+      DE: ["nachtlicht", "luftbefeuchter", "schreibtisch organizer", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung", "gesichtsroller"],
+      AT: ["nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung"],
+      CH: ["nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung"],
+      GB: ["night light", "humidifier", "desk organiser", "massage gun", "mini projector", "phone holder", "kitchen storage", "face roller"],
     } satisfies Record<Country, string[]>,
     /** Kostenkontrolle SerpApi: je Seed 1 Request, je Keyword 1 Request */
     maxSeedsPerCountry: 8,
@@ -389,10 +391,12 @@ export const radarConfig = {
     /** Treffer pro Shopping-Anfrage, die in den Median eingehen */
     maxResults: 20,
     /**
-     * Kostenbremse: Echte Shopping-Preise nur für die N Keywords mit dem höchsten Trend-Score je Land;
-     * alle anderen nutzen den Kategorie-Faktor (im Dashboard als Schätzung markiert).
+     * Echte Shopping-Preise je Land: mindestens `minLookupsPerCountry` (aus dem SerpApi-Anteil des Landes
+     * reserviert), höchstens `maxLookupsPerCountry`. Was die Trends vom Anteil übrig lassen – etwa weil der
+     * Keyword-Filter Kurven spart –, geht an Shopping. Keywords ohne Preisabfrage nutzen den Kategorie-Faktor.
      */
-    maxLookupsPerCountry: 5,
+    minLookupsPerCountry: 8,
+    maxLookupsPerCountry: 45,
   },
 
   /**

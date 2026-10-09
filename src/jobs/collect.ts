@@ -26,7 +26,7 @@ import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { createDbTokenStore } from "@/lib/token-store";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
 import { loadFxRates, withFx, type FxInfo } from "@/sources/fx/ecb";
-import { quotaDecision } from "@/sources/budget";
+import { countryShare, quotaDecision } from "@/sources/budget";
 import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
@@ -185,7 +185,10 @@ async function collectDemand(ctx: RunContext, source: TrendSource, country: Coun
     ctx.errors.push({ level: "warnung", source: "claude", country, message: `Keyword-Prüfung fehlgeschlagen, alle regelkonformen Begriffe bleiben drin: ${gate.claudeError}` });
   }
   const kept = new Set(gate.kept);
-  const keywords = discovered.filter((d) => kept.has(d.keyword)).slice(0, radarConfig.demand.maxKeywordsPerCountry);
+  // Google Trends: höchstens so viele Kurven, wie der SerpApi-Anteil des Landes noch hergibt
+  const budget = source.usesSerpApiBudget ? ctx.sources.serpApiBudget : null;
+  const limit = Math.min(radarConfig.demand.maxKeywordsPerCountry, budget ? budget.available : Infinity);
+  const keywords = discovered.filter((d) => kept.has(d.keyword)).slice(0, limit);
   ctx.stats.discovered += discovered.length;
   ctx.stats.keywords += keywords.length;
   logKeywordGate(source.id, country, discovered.length, gate, keywords.length, useClaude && ctx.keywordClassifier.mode === "live");
@@ -485,10 +488,10 @@ interface Allowance {
  * mit dem höchsten Trend-Score. Erfolgt synchron vor der parallelen Verarbeitung, damit ein schwächeres
  * Keyword einem stärkeren nie den Platz wegnimmt.
  */
-function assignAllowances(ctx: RunContext, sorted: ScoredDemand[]): Allowance[] {
+function assignAllowances(ctx: RunContext, sorted: ScoredDemand[], priceBudget: number): Allowance[] {
   const supplyUsed = new Map<string, number>();
   let priceUsed = 0;
-  const priceLimit = ctx.sources.price ? (ctx.sources.price.maxLookupsPerCountry ?? Infinity) : 0;
+  const priceLimit = ctx.sources.price ? Math.min(ctx.sources.price.maxLookupsPerCountry ?? Infinity, priceBudget) : 0;
   return sorted.map(() => {
     const supply = new Set<string>();
     for (const source of ctx.sources.supply) {
@@ -504,7 +507,13 @@ function assignAllowances(ctx: RunContext, sorted: ScoredDemand[]): Allowance[] 
   });
 }
 
-async function collectCountry(ctx: RunContext, country: Country): Promise<void> {
+async function collectCountry(ctx: RunContext, country: Country, countriesLeft: number): Promise<void> {
+  // SerpApi-Anteil des Landes: Rest ÷ verbleibende Länder; die Trends lassen die Shopping-Reserve übrig.
+  const budget = ctx.sources.serpApiBudget;
+  const start = budget?.consumed ?? 0;
+  const plan = budget ? countryShare(budget.limit - start, countriesLeft, radarConfig.referencePrice.minLookupsPerCountry) : null;
+  if (budget && plan) budget.setCeiling(start + plan.trendCap);
+
   // Erst alle Trendquellen einsammeln, dann gemeinsam priorisieren.
   const all: ScoredDemand[] = [];
   for (const trendSource of ctx.sources.trend) all.push(...(await collectDemand(ctx, trendSource, country)));
@@ -521,8 +530,15 @@ async function collectCountry(ctx: RunContext, country: Country): Promise<void> 
     .sort((a, b) => b.trend.score - a.trend.score);
   ctx.stats.qualified += qualified.length;
 
-  const allowances = assignAllowances(ctx, qualified);
+  // Was die Trends vom Anteil übrig gelassen haben, geht an Google Shopping.
+  if (budget && plan) budget.setCeiling(start + plan.share);
+  const trendSearches = budget ? budget.consumed - start : 0;
+  const allowances = assignAllowances(ctx, qualified, budget ? budget.available : Infinity);
   await mapWithConcurrency(qualified, radarConfig.collect.concurrency, (d, i) => processKeyword(ctx, d, country, allowances[i]!));
+  if (budget && plan) {
+    budget.setCeiling(null);
+    console.log(`  SerpApi ${country}: Anteil ${plan.share} Suchen – Trends ${trendSearches}, Shopping ${budget.consumed - start - trendSearches}`);
+  }
 }
 
 // ── Hauptablauf ──────────────────────────────────────────────────────────
@@ -624,8 +640,16 @@ async function main(): Promise<number> {
 
   let status: "SUCCEEDED" | "PARTIAL" | "FAILED" = "SUCCEEDED";
   try {
-    for (const country of COUNTRIES) {
-      await collectCountry(ctx, country);
+    // Länder, in die keine Angebotsquelle liefert (CH/GB ohne AliExpress), bekämen nie Kandidaten –
+    // ihre Trend-Suchen wären verschenkt.
+    const served = COUNTRIES.filter((c) => sources.supply.some((s) => !s.countries || s.countries.includes(c)));
+    for (const country of COUNTRIES.filter((c) => !served.includes(c))) {
+      const message = `${country} übersprungen: keine Angebotsquelle liefert dorthin (AliExpress-Keys fehlen) – spart die Trend-Suchen.`;
+      console.log(`  ${message}`);
+      ctx.errors.push({ level: "warnung", source: "betrieb", country, message });
+    }
+    for (const [i, country] of served.entries()) {
+      await collectCountry(ctx, country, served.length - i);
       console.log(`  ${country}: fertig`);
     }
     const pinterestExpiry = sources.pinterestAuth?.refreshExpiresAt;

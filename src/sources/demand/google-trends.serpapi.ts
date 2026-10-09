@@ -37,6 +37,8 @@ export class GoogleTrendsSerpApiSource implements TrendSource {
   readonly mode = "live" as const;
   private readonly throttle = new Throttle();
 
+  readonly usesSerpApiBudget = true;
+
   constructor(
     private readonly apiKey: string,
     private readonly budget: SearchBudget,
