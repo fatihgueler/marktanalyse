@@ -52,6 +52,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `npm run dev` | Dashboard im Entwicklungsmodus |
 | `npm run build` / `npm run start` | Production-Build / -Server |
 | `npm run collect` | Ein kompletter Datenlauf (Snapshot). Mit echten Keys: `npm run collect -- --live` |
+| `npm run collect -- --live --countries=DE --max-searches=100` | Kleiner Probelauf: nur die genannten Länder (`DE,AT,CH,GB`) und höchstens so viele SerpApi-Suchen. Senkt das Budget laut Config nur, erhöht es nie. Der Lauf erscheint wie ein normaler Lauf im Dashboard. |
 | `npm run rescore -- --run <id>` | Nachbewertung eines gespeicherten Laufs mit den aktuellen Filtern und Regeln, **ohne** neue SerpApi- oder Apify-Abfragen (siehe [Nachbewertung](#nachbewertung-eines-laufs)). Mit Claude-Key: `-- --run <id> --live` |
 | `npm run check` | Verbindungstest: prüft jeden gesetzten Key kostenlos (SerpApi-Kontingent, Apify-Guthaben, Ablauf des Meta-Tokens …). Mit `-- --probe` zusätzlich je eine echte Abfrage der kostenpflichtigen Quellen (3 SerpApi-Suchen, höchstens ~0,25 $ Apify). |
 | `npm test` | Unit-Tests (Scoring, Marge, Wettbewerb, Matching, Signatur) |
