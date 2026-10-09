@@ -20,13 +20,15 @@ interface RunStatusProps {
   status: string;
   sourceModes: Record<string, string>;
   notes: RunNote[];
+  /** Nachbewertung: Start des Originallaufs, dessen Daten neu bewertet wurden */
+  rescoreOf?: { startedAt: Date | null } | null;
 }
 
 /**
  * Eine Statuszeile statt eines Schilds pro Quelle: Modus, wie viele Quellen live sind, Stand.
  * Einzelheiten stehen unter „Quellen“; Warnungen und Fehler des Laufs lassen sich aufklappen.
  */
-export function RunStatus({ startedAt, status, sourceModes, notes }: RunStatusProps) {
+export function RunStatus({ startedAt, status, sourceModes, notes, rescoreOf }: RunStatusProps) {
   const modes = Object.values(sourceModes);
   const live = modes.filter((m) => m === "live").length;
   const mode = live === modes.length ? "Live" : live <= 1 ? "Demo-Modus" : "Teilweise live";
@@ -48,7 +50,13 @@ export function RunStatus({ startedAt, status, sourceModes, notes }: RunStatusPr
           {live} von {modes.length} Quellen live
         </span>
         <span aria-hidden="true">·</span>
-        <span>Stand {formatDateTime(startedAt)}</span>
+        {rescoreOf ? (
+          <span>
+            Nachbewertung vom {formatDateTime(startedAt)} · Daten vom {rescoreOf.startedAt ? formatDateTime(rescoreOf.startedAt) : "Originallauf"}
+          </span>
+        ) : (
+          <span>Stand {formatDateTime(startedAt)}</span>
+        )}
         <Link href="/quellen" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline">
           Quellen <ArrowRight className="size-3.5" aria-hidden="true" />
         </Link>

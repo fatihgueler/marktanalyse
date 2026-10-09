@@ -14,6 +14,7 @@ import {
   getCategoryCounts,
   getComparisonRun,
   getLatestRun,
+  getRunStart,
   getPreviousCandidates,
   getProductChecks,
   hiddenDemoSources,
@@ -154,6 +155,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const groups = onlyNew ? moved : allGroups;
   const shownManual = onlyNew ? [] : manual;
   const notes = run && Array.isArray(run.errors) ? (run.errors as unknown as RunNote[]) : [];
+  const rescoreOf = run?.rescoreOf ? { startedAt: await getRunStart(run.rescoreOf) } : null;
 
   return (
     <>
@@ -169,7 +171,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </p>
           </div>
           {run ? (
-            <RunStatus startedAt={run.startedAt} status={run.status} sourceModes={run.sourceModes as Record<string, string>} notes={notes} />
+            <RunStatus startedAt={run.startedAt} status={run.status} sourceModes={run.sourceModes as Record<string, string>} notes={notes} rescoreOf={rescoreOf} />
           ) : (
             <p className="text-sm text-muted-foreground">Noch kein Datenlauf. Eigene Produkte prüfst du im Produkt-Check.</p>
           )}

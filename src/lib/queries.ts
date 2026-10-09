@@ -50,6 +50,11 @@ export async function getLatestRun() {
   return runs.find((run) => isLiveOperation(run.sourceModes as Record<string, string>)) ?? runs[0] ?? null;
 }
 
+/** Startzeit eines Laufs – für den Hinweis „Nachbewertung von Lauf vom …“ */
+export async function getRunStart(id: string): Promise<Date | null> {
+  return (await getDb().run.findUnique({ where: { id }, select: { startedAt: true } }))?.startedAt ?? null;
+}
+
 /**
  * Quellen, deren Angebote in einem echten Lauf nicht gezeigt werden: Sie liefen im Demo-Modus und erfinden
  * Produkte (Links führen ins Leere). Ältere Läufe mischten Demo-Angebote noch unter echte Trends.

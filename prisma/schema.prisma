@@ -37,6 +37,8 @@ model Run {
   configVersion String
   /// gesammelte Adapter-Fehler [{ source, message, context }]
   errors        Json?
+  /// Nachbewertung: ID des Laufs, dessen gespeicherte Daten neu bewertet wurden (`npm run rescore`); null = normaler Lauf
+  rescoreOf     String?
 
   demandSignals   DemandSignal[]
   supplyOffers    SupplyOffer[]

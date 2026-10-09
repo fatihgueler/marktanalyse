@@ -31,6 +31,8 @@ export class Alibaba1688MockSource implements SupplySource {
     return titles.slice(0, limit).map((title, rank) => {
       const externalId = String(600_000_000_000 + (hashString(`${product.slug}|1688|${title}`) % 99_999_999_999));
       const base = Math.round(product.supplierPriceEur * WHOLESALE_DISCOUNT * radarConfig.fx.CNY * between(rng, 0.85, 1.2) * 100) / 100;
+      const priceTiers = TIER_FACTORS.map((t) => ({ minQty: t.minQty, price: Math.round(base * t.factor * 100) / 100 }));
+      const moq = Math.round(between(rng, 2, 60));
       return {
         source: this.id,
         country: shipTo,
@@ -48,10 +50,20 @@ export class Alibaba1688MockSource implements SupplySource {
         rating: null,
         resultCount: null,
         sourcingModel: "wholesale" as const,
-        priceTiers: TIER_FACTORS.map((t) => ({ minQty: t.minQty, price: Math.round(base * t.factor * 100) / 100 })),
-        moq: Math.round(between(rng, 2, 60)),
+        priceTiers,
+        moq,
         weightKg: null,
-        raw: { mock: true, catalogSlug: product.slug, rank },
+        // Rohdaten im Format des Apify-Actors, damit die Nachbewertung sie wie echte Daten neu lesen kann
+        raw: {
+          mock: true,
+          catalogSlug: product.slug,
+          rank,
+          offerId: externalId,
+          title,
+          priceValue: base,
+          tierPricing: priceTiers.map((t) => ({ minQuantity: t.minQty, unitPrice: t.price })),
+          moq,
+        },
       };
     });
   }
