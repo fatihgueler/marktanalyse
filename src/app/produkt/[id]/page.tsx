@@ -18,6 +18,7 @@ import { formatDateTime, formatMoney, formatMoneyRounded, formatNumber, formatPe
 import { demandMetric, judgeLabel, sourceLabel } from "@/lib/labels";
 import { getCandidateDetail, getDropOutcomes, type CandidateDetail } from "@/lib/queries";
 import { offerLink } from "@/lib/offer-link";
+import { displayTitle } from "@/lib/display-title";
 import { shortTitle } from "@/lib/short-title";
 import { competitionLevel, deliveryWords, isSlowDelivery, rankingReason, rankingVerdict, trendSummary } from "@/scoring/ranking";
 import { deleteDrop } from "./drop-actions";
@@ -29,7 +30,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
   const candidate = await getCandidateDetail(id);
-  return { title: candidate ? `${shortTitle(candidate.product.title)} · Trend-Radar` : "Nicht gefunden · Trend-Radar" };
+  return { title: candidate ? `${shortTitle(displayTitle(candidate.product.title, candidate.breakdown))} · Trend-Radar` : "Nicht gefunden · Trend-Radar" };
 }
 
 /** Klartext-Zusammenfassung der wichtigsten Gründe – dieselben Zahlen wie in der Aufschlüsselung. */
@@ -73,7 +74,7 @@ export default async function ProductDetailPage({ params }: Params) {
   const referenceSourceLabel =
     candidate.referencePriceSource === "config-multiplikator"
       ? `Schätzung: Einkauf × Faktor ${formatNumber(radarConfig.categories[candidate.category as CategoryId]?.retailMultiplier ?? 0, 1)} (keine Shopping-Preise)`
-      : `Median aus ${breakdown.referencePrice.sampleSize ?? "?"} Angeboten (${sourceLabel(candidate.referencePriceSource)})`;
+      : `Median aus ${breakdown.referencePrice.sampleSize ?? "?"} Angeboten (${sourceLabel(candidate.referencePriceSource)}${breakdown.offer?.productQuery ? `, Suche „${breakdown.offer.productQuery}“` : ""})`;
   const ranking = { trend: breakdown.trend, competition: breakdown.competition, total: candidate.totalScore, belowMinMargin: candidate.belowMinMargin };
   const verdict = rankingVerdict(ranking);
   const { margin } = breakdown;
@@ -102,7 +103,7 @@ export default async function ProductDetailPage({ params }: Params) {
             <ProductImage src={candidate.product.imageUrl} name={candidate.product.title} className="size-20 shrink-0 rounded-xl sm:size-28" />
             <div className="grid min-w-0 content-start gap-1.5">
               <h1 id="produkt-titel" className="text-2xl leading-tight font-bold tracking-tight sm:text-3xl">
-                {shortTitle(candidate.product.title)}
+                {shortTitle(displayTitle(candidate.product.title, breakdown))}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {radarConfig.countries[country].label} · {categoryLabel}

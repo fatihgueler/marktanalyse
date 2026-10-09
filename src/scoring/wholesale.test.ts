@@ -84,3 +84,13 @@ describe("calculateWholesaleMargin", () => {
     expect(() => calculateWholesaleMargin({ ...input, country: "GB", referenceCurrency: "GBP" }, makeTestConfig())).toThrow(/nicht konfiguriert/);
   });
 });
+
+describe("Staffel bekannt oder nicht", () => {
+  it("markiert, wenn die Quelle keine Staffel liefert (1688-Suche: tierPricing = [])", () => {
+    const known = calculateWholesaleMargin(input, makeTestConfig());
+    expect(known.wholesale?.tierKnown).toBe(true);
+    const unknown = calculateWholesaleMargin({ ...input, priceTiers: [] }, makeTestConfig());
+    expect(unknown.wholesale?.tierKnown).toBe(false);
+    expect(unknown.wholesale?.tierUnitPrice).toBe(48); // Stückpreis laut Suche
+  });
+});

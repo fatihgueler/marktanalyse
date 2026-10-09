@@ -23,6 +23,7 @@ import {
   type SortKey,
 } from "@/lib/queries";
 import { sourceLabel } from "@/lib/labels";
+import { displayTitle } from "@/lib/display-title";
 import { shortTitle } from "@/lib/short-title";
 import type { CheckVerdict } from "@/scoring/product-check";
 import { SUPPLY_SOURCES } from "@/sources/readiness";
@@ -76,7 +77,7 @@ function cardFromGroup(group: CandidateGroup<CandidateRow>, movement: ProductCar
   });
   return {
     href: `/produkt/${best.id}`,
-    name: shortTitle(best.product.title),
+    name: shortTitle(displayTitle(best.product.title, best.breakdown)),
     imageUrl: best.product.imageUrl ?? group.rows.find((r) => r.product.imageUrl)?.product.imageUrl ?? null,
     subtitle: [categoryLabel(best.category), group.offerCount > 1 ? `${group.offerCount} Angebote` : null].filter(Boolean).join(" · "),
     verdict: { label: verdict, tone: VERDICT_TONE[verdict] },

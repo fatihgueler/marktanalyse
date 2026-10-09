@@ -195,6 +195,8 @@ export interface WholesaleDetails {
   tierUnitPrice: number;
   tierMinQty: number;
   tierCurrency: string;
+  /** false = die Quelle lieferte keine passende Staffel, gerechnet wird mit dem Stückpreis laut Suche; fehlt bei älteren Snapshots */
+  tierKnown?: boolean;
   agentFee: number;
   freight: number;
   weightKg: number;
@@ -296,6 +298,7 @@ export function calculateWholesaleMargin(input: WholesaleMarginInput, config: Ra
       tierUnitPrice: tier.price,
       tierMinQty: tier.minQty,
       tierCurrency: input.purchaseCurrency,
+      tierKnown: input.priceTiers.some((t) => t.minQty <= lotSize && t.price > 0),
       agentFee,
       freight,
       weightKg,

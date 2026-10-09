@@ -16,12 +16,9 @@ import { readCollectEnv } from "@/lib/env";
 import { round } from "@/lib/stats";
 import { createKeywordClassifier, type KeywordProductClassifier } from "@/matching/keyword-classifier";
 import { gateKeywords, type KeywordGateResult } from "@/matching/keyword-gate";
-import { createJudge, matchProducts, type JudgmentCache } from "@/matching/match";
-import type { Judgment, MatchJudge } from "@/matching/types";
+import { createJudge } from "@/matching/match";
+import type { MatchJudge } from "@/matching/types";
 import { combineAdSignals } from "@/scoring/ads";
-import { scoreCompetition } from "@/scoring/competition";
-import { calculateMargin, calculateWholesaleMargin, fallbackReferencePrice } from "@/scoring/margin";
-import { totalScore, type CandidateBreakdown } from "@/scoring/score";
 import { scoreTrend, type TrendBreakdown } from "@/scoring/trend";
 import { createDbTokenStore } from "@/lib/token-store";
 import { metaTokenDaysLeft } from "@/sources/ads/meta-ad-library";
@@ -31,6 +28,8 @@ import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
 import { countCards, formatFunnel, printMessages, printTopCandidates, type RunMessage } from "./run-report";
+import { printDroppedOffers, scoreKeyword, type DroppedOffers } from "./keyword-scoring";
+import { createTitleTranslator, type OfferTitleTranslator } from "@/matching/title-translator";
 import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
 loadDotenv({ quiet: true });
@@ -47,7 +46,9 @@ interface RunContext {
   fx: FxInfo;
   judge: MatchJudge;
   keywordClassifier: KeywordProductClassifier;
+  translator: OfferTitleTranslator;
   errors: RunError[];
+  dropped: DroppedOffers;
   stats: { discovered: number; keywords: number; qualified: number; offers: number; candidates: number };
 }
 
@@ -103,42 +104,6 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   return lines;
 }
 
-// ── Match-Cache über Prisma ─────────────────────────────────────────────
-
-function createJudgmentCache(db: PrismaClient, productIds: Map<string, string>): JudgmentCache {
-  return {
-    async load(keyword, externalIds, judgeId) {
-      const internalIds = externalIds.map((id) => productIds.get(id)).filter((id): id is string => Boolean(id));
-      const rows = await db.matchJudgment.findMany({
-        where: { keyword, judge: judgeId, productId: { in: internalIds } },
-        include: { product: { select: { externalId: true } } },
-      });
-      return new Map(
-        rows.map((row) => [
-          row.product.externalId,
-          {
-            externalId: row.product.externalId,
-            relevance: row.relevance,
-            category: row.category as Judgment["category"],
-            reason: row.reason,
-          },
-        ]),
-      );
-    },
-    async save(keyword, judgeId, judgments) {
-      for (const j of judgments) {
-        const productId = productIds.get(j.externalId);
-        if (!productId) continue;
-        await db.matchJudgment.upsert({
-          where: { keyword_productId_judge: { keyword, productId, judge: judgeId } },
-          create: { keyword, productId, judge: judgeId, relevance: j.relevance, category: j.category, reason: j.reason },
-          update: { relevance: j.relevance, category: j.category, reason: j.reason },
-        });
-      }
-    },
-  };
-}
-
 // ── Nachfrage ────────────────────────────────────────────────────────────
 
 interface ScoredDemand {
@@ -150,7 +115,6 @@ interface ScoredDemand {
 /** Log: vorher/nachher je Land und Quelle plus einige verworfene Beispiele mit Grund. */
 function logKeywordGate(sourceId: string, country: Country, found: number, gate: KeywordGateResult, requested: number, claudeChecked: boolean): void {
   const byRule = gate.rejected.filter((r) => r.by === "regel").length;
-  const byClaude = gate.rejected.length - byRule;
   const limit = radarConfig.demand.maxKeywordsPerCountry;
   console.log(
     `  Keyword-Filter ${country} · ${sourceId}: ${found} gefunden → ${found - byRule} nach Regeln` +
@@ -250,7 +214,7 @@ async function storeOffers(ctx: RunContext, offers: SupplyRecord[], country: Cou
   return stored;
 }
 
-async function storeReferencePrice(ctx: RunContext, record: PriceRecord, keyword: string, country: Country): Promise<void> {
+async function storeReferencePrice(ctx: RunContext, record: PriceRecord, keyword: string, query: string, country: Country): Promise<void> {
   await ctx.db.referencePrice.create({
     data: {
       runId: ctx.runId,
@@ -261,18 +225,20 @@ async function storeReferencePrice(ctx: RunContext, record: PriceRecord, keyword
       currency: record.currency,
       sampleSize: record.sampleSize,
       fetchedAt: record.fetchedAt,
-      raw: asJson(record.raw),
+      // Suchbegriff mitspeichern: seit 10/2026 der Produkt-Suchbegriff des passendsten Angebots
+      raw: asJson({ ...(record.raw as object), query }),
     },
   });
 }
 
-async function fetchReferencePrice(ctx: RunContext, keyword: string, country: Country): Promise<PriceRecord | null> {
+/** Referenzpreis per Shopping-Suche nach `query`; gespeichert unter dem Keyword (eine Abfrage je Keyword und Land). */
+async function fetchReferencePrice(ctx: RunContext, query: string, keyword: string, country: Country): Promise<PriceRecord | null> {
   const source = ctx.sources.price;
   if (!source) return null;
   try {
-    const record = await source.referencePrice(keyword, country);
+    const record = await source.referencePrice(query, country);
     if (!record) return null;
-    await storeReferencePrice(ctx, record, keyword, country);
+    await storeReferencePrice(ctx, record, keyword, query, country);
     return record;
   } catch (error) {
     ctx.errors.push({ source: source.id, country, keyword, message: errorMessage(error) });
@@ -338,143 +304,29 @@ async function searchAllSupply(ctx: RunContext, keyword: string, country: Countr
 }
 
 /**
- * Ein Keyword komplett verarbeiten: Angebote aller Quellen, dann Referenzpreis und Werbedaten
- * EINMAL je Keyword (nicht je Angebotsquelle – spart Kosten), dann Matching und Scoring je Quelle.
+ * Ein Keyword komplett verarbeiten: Angebote aller Quellen speichern, Werbedaten EINMAL je Keyword,
+ * dann Matching, Übersetzung, Referenzpreis (passend zum Produkt) und Scoring in `scoreKeyword`.
  */
 async function processKeyword(ctx: RunContext, demand: ScoredDemand, country: Country, allowed: Allowance): Promise<void> {
   const keyword = demand.record.keyword;
   const bySource = await searchAllSupply(ctx, keyword, country, allowed);
   if (bySource.length === 0) return;
 
-  const [reference, adRecords] = await Promise.all([
-    allowed.price ? fetchReferencePrice(ctx, keyword, country) : Promise.resolve(null),
-    fetchAdSignals(ctx, keyword, country),
-  ]);
-  const ads = combineAdSignals(adRecords);
+  const groups = [];
   for (const { offers } of bySource) {
     ctx.stats.offers += offers.length;
-    await processOffers(ctx, offers, demand, country, reference, ads);
+    groups.push(await storeOffers(ctx, offers, country));
   }
-}
-
-async function processOffers(
-  ctx: RunContext,
-  offers: SupplyRecord[],
-  demand: ScoredDemand,
-  country: Country,
-  reference: PriceRecord | null,
-  ads: ReturnType<typeof combineAdSignals>,
-): Promise<void> {
-  const keyword = demand.record.keyword;
-  const stored = await storeOffers(ctx, offers, country);
-
-  const productIds = new Map(stored.map((s) => [s.offer.externalId, s.productId]));
-  const match = await matchProducts(
-    {
-      keyword,
-      country,
-      products: offers.map((o) => ({ externalId: o.externalId, title: o.title, price: o.price, currency: o.currency })),
-    },
-    ctx.judge,
-    createJudgmentCache(ctx.db, productIds),
-  );
-  if (match.error) ctx.errors.push({ source: "claude", country, keyword, message: match.error });
-
-  // Wettbewerb gilt für das Keyword je Quelle: Anbieterzahl + Bestellvolumen aller Top-Treffer + Werbedruck.
-  const orders = offers.map((o) => o.orders30d).filter((o): o is number => o !== null);
-  const competition = scoreCompetition(
-    {
-      resultCount: offers[0]?.resultCount ?? null,
-      orders30dSum: orders.length > 0 ? orders.reduce((a, b) => a + b, 0) : null,
-      advertisers: ads.advertisers,
-    },
-    ctx.config.competition,
-  );
-
-  for (const { offer, productId, offerId } of stored) {
-    const judgment = match.judgments.get(offer.externalId);
-    if (!judgment || judgment.relevance < radarConfig.matching.minRelevance) continue;
-
-    const currency = ctx.config.countries[country].currency;
-    // ANNAHME: Beim Großhandelspreis fällt die Faktor-Schätzung konservativ (niedriger) aus.
-    const referencePrice = reference?.medianPrice ?? fallbackReferencePrice(offer.price, offer.currency, country, judgment.category, ctx.config);
-    const referenceCurrency = reference?.currency ?? currency;
-    const referenceSource = reference ? reference.source : "config-multiplikator";
-
-    const margin =
-      offer.sourcingModel === "wholesale"
-        ? calculateWholesaleMargin(
-            {
-              country,
-              category: judgment.category,
-              basePrice: offer.price,
-              priceTiers: offer.priceTiers ?? [],
-              purchaseCurrency: offer.currency,
-              moq: offer.moq ?? null,
-              weightKg: offer.weightKg ?? null,
-              referencePrice,
-              referenceCurrency,
-            },
-            ctx.config,
-          )
-        : calculateMargin(
-            {
-              country,
-              category: judgment.category,
-              purchasePrice: offer.price,
-              purchaseCurrency: offer.currency,
-              shippingCost: offer.shippingCost,
-              shippingCurrency: offer.currency,
-              referencePrice,
-              referenceCurrency,
-            },
-            ctx.config,
-          );
-    const score = totalScore({ trend: demand.trend, margin, competition, relevance: judgment.relevance });
-    const breakdown: CandidateBreakdown = {
-      trend: demand.trend,
-      margin,
-      competition,
-      score,
-      referencePrice: {
-        source: referenceSource,
-        sampleSize: reference?.sampleSize ?? null,
-        originalPrice: referencePrice,
-        originalCurrency: referenceCurrency,
-      },
-      ads,
-      delivery: offer.delivery ?? undefined,
-      fx: { source: ctx.fx.source, date: ctx.fx.date },
-    };
-
-    await ctx.db.candidateSnapshot.create({
-      data: {
-        runId: ctx.runId,
-        productId,
-        demandSignalId: demand.signalId,
-        supplyOfferId: offerId,
-        country,
-        keyword,
-        category: judgment.category,
-        relevance: judgment.relevance,
-        matchReason: judgment.reason,
-        matchJudge: judgment.judge,
-        trendScore: demand.trend.score,
-        marginScore: margin.score,
-        competitionScore: competition.score,
-        totalScore: score.total,
-        landedCost: round(margin.landedCost),
-        referencePrice: round(margin.referencePrice),
-        referencePriceSource: referenceSource,
-        marginAbs: round(margin.marginAbs),
-        marginPct: margin.marginPct,
-        belowMinMargin: margin.belowMinMargin,
-        currency: margin.currency,
-        breakdown: asJson(breakdown),
-      },
-    });
-    ctx.stats.candidates++;
-  }
+  const ads = combineAdSignals(await fetchAdSignals(ctx, keyword, country));
+  await scoreKeyword(ctx, {
+    keyword,
+    country,
+    trend: demand.trend,
+    demandSignalId: demand.signalId,
+    groups,
+    ads,
+    reference: allowed.price ? (query) => fetchReferencePrice(ctx, query, keyword, country) : null,
+  });
 }
 
 /** Welche kostenpflichtigen Abfragen ein Keyword bekommt – vorab festgelegt, damit die Reihenfolge stimmt. */
@@ -634,7 +486,9 @@ async function main(): Promise<number> {
     fx,
     judge,
     keywordClassifier: createKeywordClassifier(env),
+    translator: createTitleTranslator(env),
     errors: [...warnings],
+    dropped: { license: [], implausible: [] },
     stats: { discovered: 0, keywords: 0, qualified: 0, offers: 0, candidates: 0 },
   };
 
@@ -672,6 +526,7 @@ async function main(): Promise<number> {
   if (sources.serpApiBudget) console.log(`  SerpApi-Budget: ${sources.serpApiBudget.consumed} von ${sources.serpApiBudget.limit} Suchen verbraucht`);
   console.log(`\nLauf ${run.id}: ${status}`);
   console.log(`  Trichter: ${formatFunnel(ctx.stats, await countCards(db, run.id))}`);
+  printDroppedOffers(ctx.dropped);
   printMessages(ctx.errors);
   await printTopCandidates(db, run.id);
   await db.$disconnect();

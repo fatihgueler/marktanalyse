@@ -44,7 +44,11 @@ export function MarginBreakdown({ margin, referenceSourceLabel }: { margin: Marg
             label="Einkauf"
             amount={margin.purchase}
             currency={c}
-            hint={`Staffel ab ${formatNumber(w.tierMinQty)} Stück: ${formatNumber(w.tierUnitPrice, 2)} ${w.tierCurrency}`}
+            hint={
+              w.tierKnown === false
+                ? `Stückpreis laut Suche: ${formatNumber(w.tierUnitPrice, 2)} ${w.tierCurrency} · Staffel unbekannt`
+                : `Staffel ab ${formatNumber(w.tierMinQty)} Stück: ${formatNumber(w.tierUnitPrice, 2)} ${w.tierCurrency}`
+            }
           />
           <Line label="Agentengebühr" amount={w.agentFee} currency={c} sign="+" hint="Einkauf, Kontrolle, Konsolidierung" />
           <Line label="Luftfracht nach DE" amount={w.freight} currency={c} sign="+" hint={`${formatNumber(w.weightKg, 2)} kg ${w.weightSource === "config" ? "(Annahme)" : "(laut Quelle)"}`} />
