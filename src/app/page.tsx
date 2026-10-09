@@ -134,16 +134,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? await Promise.all([getCandidates(run.id, filters, hidden), getCategoryCounts(run.id, filters.country, hidden)])
     : [[] as CandidateRow[], new Map<string, number>()];
   for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
-  const seasonalGroups = groupCandidates(
-    rows.filter((row) => row.breakdown.trend.seasonal),
-    filters.sort,
-  ).length;
-  const allGroups = groupCandidates(
-    rows
-      .filter((row) => !(filters.hideSeasonal && row.breakdown.trend.seasonal))
-      .map((row) => ({ ...row, slowDelivery: isSlowDelivery(row.breakdown.delivery) })),
+  // Saisonware: ein Produkt gilt als saisonal, wenn es in irgendeinem Land als „Saison“ erkannt wurde.
+  const groupedAll = groupCandidates(
+    rows.map((row) => ({ ...row, slowDelivery: isSlowDelivery(row.breakdown.delivery) })),
     filters.sort,
   );
+  const isSeasonalGroup = (g: (typeof groupedAll)[number]) => g.rows.some((r) => r.breakdown.trend.seasonal);
+  const seasonalGroups = groupedAll.filter(isSeasonalGroup).length;
+  const allGroups = filters.hideSeasonal ? groupedAll.filter((g) => !isSeasonalGroup(g)) : groupedAll;
 
   // „Neu diese Woche“: Vergleich mit dem Lauf von vor mindestens `compareMinDaysBack` Tagen.
   const comparison = run ? await getComparisonRun(run) : null;

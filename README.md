@@ -52,6 +52,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `npm run dev` | Dashboard im Entwicklungsmodus |
 | `npm run build` / `npm run start` | Production-Build / -Server |
 | `npm run collect` | Ein kompletter Datenlauf (Snapshot). Mit echten Keys: `npm run collect -- --live` |
+| `npm run rescore -- --run <id>` | Nachbewertung eines gespeicherten Laufs mit den aktuellen Filtern und Regeln, **ohne** neue SerpApi- oder Apify-Abfragen (siehe [Nachbewertung](#nachbewertung-eines-laufs)). Mit Claude-Key: `-- --run <id> --live` |
 | `npm run check` | Verbindungstest: prüft jeden gesetzten Key kostenlos (SerpApi-Kontingent, Apify-Guthaben, Ablauf des Meta-Tokens …). Mit `-- --probe` zusätzlich je eine echte Abfrage der kostenpflichtigen Quellen (3 SerpApi-Suchen, höchstens ~0,25 $ Apify). |
 | `npm test` | Unit-Tests (Scoring, Marge, Wettbewerb, Matching, Signatur) |
 | `npm run db:migrate` | Migrationen lokal anwenden/erstellen |
@@ -97,6 +98,8 @@ Der Code ist fertig. Für echte Marktdaten fehlen nur Konten, Keys und bei zwei 
 
 - **Minimum für verwertbare Ergebnisse: 1 + 2 + 3.** Werbedaten (5, 6), Scraping (4) und Pinterest (7) verbessern den Score, sind aber optional.
 - **SerpApi-Kontingent:** Vor jedem Lauf fragt `collect` kostenlos das Restkontingent ab. Reicht es nicht für einen vollen Lauf, wird das Budget gekappt. Unter 100 Suchen (`budget.serpApiMinSearchesPerRun`) fällt der Lauf aus. Im Gratis-Plan (250 Suchen) ist damit ein Lauf pro Monat möglich: Cron dann monatlich, 1–2 Tage nach der Erneuerung des Kontingents (Datum im SerpApi-Dashboard). Mit Starter (1.000 Suchen) wöchentlich: `45 4 * * 1`.
+- **Länder ohne Angebotsquelle laufen nicht:** 1688 liefert nur nach DE und AT. Solange AliExpress fehlt, überspringt `collect` CH und GB komplett (Hinweis im Log und unter dem Lauf-Status) – im ersten Live-Lauf hatten die beiden 104 von 216 Suchen verbraucht, ohne ein einziges Angebot.
+- **SerpApi-Anteil je Land:** Jedes Land bekommt Rest ÷ verbleibende Länder. Darin reservieren die Trends mindestens `referencePrice.minLookupsPerCountry` (8) Suchen für Google Shopping; was der Keyword-Filter an Kurven spart, geht ebenfalls an Shopping (höchstens eine Abfrage je Keyword), der Rest an die folgenden Länder. Das Log zeigt je Land „Anteil … – Trends …, Shopping …“.
 - **Kein Lauf ohne Aussicht auf Kandidaten:** Sind Trends live, aber keine brauchbare Angebotsquelle (AliExpress, oder 1688 zusammen mit Claude), bricht `collect -- --live` vor der ersten bezahlten Suche ab (Exit-Code 3) und nennt den fehlenden Schlüssel.
 - **Echtbetrieb ohne Demo-Daten:** Sobald eine Trend- oder Angebotsquelle live ist, laufen die übrigen Demo-Quellen nicht mehr mit (im Dashboard „aus“). Ihre Signale zählen dann neutral, statt erfundene Werte in die Rangliste zu mischen. Was dadurch fehlt, steht als Hinweis unter dem Lauf-Status. Das Dashboard zeigt außerdem den letzten echten Lauf (ein neuerer Demo-Lauf verdrängt ihn nicht) und blendet darin Angebote aus Quellen aus, die im Demo-Modus liefen – das betrifft Läufe von vor dieser Regel. Demo-Angebote verlinken nie auf erfundene Artikelseiten, sondern auf die Suche beim Anbieter („Ähnliche suchen“).
 - **Gratis-Variante zum Ausprobieren:** Pinterest statt SerpApi als Trendquelle (7 + 2 + 3) kostet nur den Claude-Verbrauch. Sie deckt aber nur, was auf Pinterest gesucht wird, und die Kurven sind weniger fein als bei Google Trends. Ohne SerpApi gibt es keine echten Verkaufspreise, die Marge ist dann über den Kategorie-Faktor geschätzt.
@@ -130,8 +133,7 @@ Jede Quelle schaltet **einzeln** um, sobald ihr Key gesetzt ist. Man kann also s
 
    ```
    Kostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):
-     • SerpApi Google Trends: bis zu 132 Suchen
-     • SerpApi Google Shopping: bis zu 100 Suchen
+     • SerpApi (Trends + Shopping): bis zu 230 Suchen – hartes Budget 230 je Lauf (1000 Suchen/Monat ÷ 4.33 Läufe)
    Abbruch: Mindestens eine Quelle läuft live. Zum Bestätigen mit `npm run collect -- --live` starten.
    ```
 
@@ -182,7 +184,8 @@ Die Config ist auf die günstigste Variante eingestellt, die rund 500 Kandidaten
 So wird das Budget eingehalten:
 - **Config-Prüfung:** `budget` in `radar.config.ts` legt die Tarife fest. Vor jedem Lauf wird geprüft, dass ein Lauf im ungünstigsten Fall höchstens Monatsbudget ÷ Läufe pro Monat verbraucht (SerpApi 230 Suchen, Apify 1,15 $). Passt eine Änderung nicht dazu, bricht `collect` mit Erklärung ab.
 - **Hartes SerpApi-Budget zur Laufzeit:** Ist es erschöpft, arbeitet der Lauf mit dem weiter, was er hat, statt mehr Suchen zu verbrauchen.
-- **Priorisierung:** Echte Shopping-Preise (5 je Land) und 1688-Suchen (12 je Land) bekommen nur die Keywords mit dem höchsten Trend-Score. Die übrigen nutzen die Preisschätzung, im Dashboard als „Schätzung“ markiert.
+- **Keyword-Filter vor den Trendkurven:** Jede Kurve kostet eine Suche. Begriffe ohne importierbares Produkt fliegen vorher raus (siehe [Keyword-Filter](#keyword-filter)).
+- **Priorisierung:** Echte Shopping-Preise (mindestens 8, höchstens 45 je Land, siehe SerpApi-Anteil oben) und 1688-Suchen (12 je Land) bekommen die Keywords mit dem höchsten Trend-Score. Die übrigen nutzen die Preisschätzung, im Dashboard als „Schätzung“ markiert.
 - **AliExpress ist kostenlos:** Deshalb 12 Treffer pro Keyword statt 8, das bringt mehr Kandidaten ohne API-Kosten.
 
 Hochskalieren: `budget.serpApiMonthlySearches` auf den nächsten SerpApi-Plan setzen (Developer, 5.000 Suchen, 75 $) und `demand.maxKeywordsPerCountry` / `referencePrice.maxLookupsPerCountry` erhöhen; die Prüfung sagt, ob es passt. Railway: Für den Web-Service „Serverless“ (App Sleeping) aktivieren, dann läuft das Dashboard nur, wenn jemand es aufruft.
@@ -196,7 +199,10 @@ Wichtige Stellschrauben:
 - `tax.vatMode`: `"kleinunternehmer"` (Standard) oder `"regelbesteuert"`. Beim Wechsel in die Regelbesteuerung wird die Einfuhrumsatzsteuer als Vorsteuer abgezogen und die USt aus dem Verkaufspreis herausgerechnet.
 - `score.weights`, `trend.weights`, `competition.weights`: Gewichtung der Komponenten
 - `margin.*`: Mindest- und Zielmarge, Mindest-Rohertrag je Stück
-- `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden
+- `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden – seit 09.10.2026 konkrete Produktkategorien (Nachtlicht, Luftbefeuchter, Massagegerät …) statt „gadget“, „led“, „deko“
+- `keywordFilter`: Marken/Händler, Fragewörter, Selbermachen, Tests/Vergleiche, Filme/Spiele, Lizenzware (auch chinesisch)
+- `trend.seasonality`: Schwellen der Saison-Erkennung
+- `referencePrice.minLookupsPerCountry` / `maxLookupsPerCountry`: reservierte bzw. höchstens mögliche Shopping-Preise je Land
 - `customs`, `tax.countries`, `shipping`, `fees`, `fx`: Zoll, Steuern, Versand, Gebühren, Kurse
 
 ## So entsteht der Score
@@ -204,10 +210,31 @@ Wichtige Stellschrauben:
 Alle Scoring-Funktionen sind reine Funktionen ohne KI (`src/scoring/`) und durch Tests abgedeckt.
 
 - **Trend-Dynamik T (0–1):** vergleicht die letzten 4 Wochen mit den 4 Wochen davor. Das Wachstum geht sättigend ein (Verdopplung ≈ 0,5). Wenig Vorgeschichte im restlichen Jahr ergibt einen **Frühphasen-Bonus**, aber nur bei steigendem Interesse. Das absolute Niveau zählt bewusst wenig. Lückenhafte Reihen mit Nullwerten in den letzten Wochen gelten als Rauschen (T = 0). Jedes Keyword wird nur mit sich selbst verglichen, weil Google-Trends-Werte je Abfrage normiert sind.
-- **Marge M (0–1):** Landed Cost = Einkauf + Versand (laut AliExpress, sonst Pauschale) + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land, umgerechnet mit den EZB-Tageskursen. Verkaufspreis: Google Shopping, sonst Kategorie-Faktor. Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
+- **Saison:** Steigt ein Begriff, war er im gleichen Zeitraum des Vorjahres (die ersten Wochen des 12-Monats-Fensters) ähnlich hoch und lag dazwischen ein deutliches Tief, heißt die Phase „Saison“ statt „Frühphase“ (Halloween, Weihnachtsdeko …). Der Score ändert sich dadurch nicht; in der Rangliste blendet „Saisonware ausblenden“ solche Produkte aus.
+- **Marge M (0–1):** Landed Cost = Einkauf + Versand (laut AliExpress, sonst Pauschale) + Zoll + Einfuhrumsatzsteuer (+ ggf. Abfertigung), je Land, umgerechnet mit den EZB-Tageskursen. Verkaufspreis: Google Shopping, gesucht mit einem von Claude gebildeten Produkt-Suchbegriff des passendsten Angebots (nicht mit dem allgemeinen Keyword), sonst Kategorie-Faktor. 1688 liefert in der Suche keine Preisstaffeln; gerechnet wird dann mit dem Stückpreis laut Suche („Staffel unbekannt“). Großhandelsangebote, deren Einkaufspreis schon über dem Verkaufspreis liegt, werden verworfen (Platzhalterpreise, Ladeninstallationen). Marge = Nettoerlös − Kosten − Zahlungsgebühren. M läuft linear von der Mindest- bis zur Zielmarge.
 - **Wettbewerb W (0–1, 1 = wenig):** logarithmisch aus drei Signalen: Trefferzahl auf AliExpress (Gewicht 0,25), Bestellvolumen der Top-Treffer (0,25) und **Werbedruck** = Zahl der Shops, die das Keyword im Zielland auf Meta/TikTok bewerben (0,50). Fehlende Signale (z. B. keine Werbedaten für CH und GB) zählen neutral.
 - **Marktdynamik der Werbung** (neue Anzeigen der letzten 4 Wochen gegenüber den 4 davor) wird **nur angezeigt, nicht gewichtet**. Ob steigende Werbung Nachfrage oder Konkurrenz anzeigt, zeigt erst die Kalibrierung.
 - **Gesamtscore:** `100 × Relevanz × (0,50·T + 0,35·M + 0,15·W)`. Kandidaten unter dem Mindest-Rohertrag werden gespeichert, aber markiert und ans Ende sortiert.
+
+## Keyword-Filter
+
+Google listet unter „steigende verwandte Suchanfragen“ viel, was kein Produkt ist („ikea fado lamp“, „inspector gadget“, „herbst deko basteln“, „hulled wheat“). Bevor eine Trendkurve (= eine SerpApi-Suche) angefragt wird, prüft `collect` jeden Begriff:
+
+1. **Regeln** (kostenlos, Listen in `keywordFilter`): Marken und Händler, Fragen am Anfang, Selbermachen/Ideen, Tests/Vergleiche/Bestenlisten, Filme/Serien/Spiele, Lizenzware. Verglichen werden ganze Wörter.
+2. **Claude** (ein gebündelter Aufruf je Land): „konkretes, physisches, importierbares Produkt – ja/nein“. Nur für Google Trends; TikTok- und Pinterest-Begriffe prüft Claude schon beim Erkennen. Schlägt der Aufruf fehl, bleiben alle regelkonformen Begriffe drin.
+
+Das Log zeigt je Land und Quelle „gefunden → nach Regeln → nach Claude → abgefragt“ und einige verworfene Beispiele mit Grund. Lizenzware (Star Wars, Disney, Pokémon … auch chinesisch) wird zusätzlich bei den Angebotstiteln aussortiert.
+
+Am Ende jedes Laufs stehen im Log immer: der **Trichter** (Keywords → nach Filter → mit Trend-Dynamik → Angebote → Kandidaten → Karten), die **aussortierten Angebote**, die **Meldungen** und die **Top 10** (auch Kandidaten mit „Marge zu dünn“, markiert).
+
+## Nachbewertung eines Laufs
+
+`npm run rescore -- --run <id>` wendet die aktuellen Regeln auf die gespeicherten Rohdaten eines Laufs an: Keyword-Filter, Saison-Erkennung, Lizenz- und Plausibilitätsfilter, Titel-Übersetzung und Staffel-Angabe. Es werden **keine** SerpApi-Suchen und **keine** Apify-Läufe gemacht; nur Claude wird aufgerufen (bereits bewertete Angebote kommen aus dem Cache). Mit `ANTHROPIC_API_KEY` startet die Nachbewertung deshalb erst mit `--live`.
+
+- Das Ergebnis wird als **neuer Lauf** gespeichert (`Run.rescoreOf` = Original-ID), der Originallauf bleibt unverändert. Das Dashboard zeigt dann „Nachbewertung vom … · Daten vom …“.
+- Referenzpreise kommen aus dem Originallauf (dort noch zum allgemeinen Keyword). Produktgenaue Shopping-Preise gibt es erst beim nächsten echten Lauf.
+- Der SerpApi-Kontostand wird vorher und nachher gelesen (kostenlos); sinkt er, meldet das Skript einen Fehler.
+- **Auf Railway:** im Service „collect“ den Start Command vorübergehend auf `npm run rescore -- --run <id> --live` setzen, „Run now“, Log lesen, danach zurück auf `npm run collect -- --live`.
 
 ## Dashboard
 
@@ -243,9 +270,10 @@ src/
 │                  (ads/: Meta, TikTok), Scraping (scraping/: Apify, TikTok Creative Center,
 │                  1688), Mock-Katalog
 ├── matching/      Claude-Judge (Structured Output), Heuristik, Cache-Logik,
-│                  Hashtag-Klassifizierung, Übersetzung für 1688
+│                  Hashtag-Klassifizierung, Keyword-Prüfung, Übersetzung für 1688 und der Angebotstitel
 ├── scoring/       trend, margin, competition, ads, score, calibration (+ Tests)
-├── jobs/          collect.ts (Datenlauf), check.ts (Verbindungstest)
+├── jobs/          collect.ts (Datenlauf), rescore.ts (Nachbewertung), keyword-scoring.ts
+│                  (Bewertung je Keyword, gemeinsam), run-report.ts (Log), check.ts (Verbindungstest)
 ├── lib/           db, env, auth, Formatierung, Queries
 ├── components/    Dashboard-Komponenten (+ shadcn/ui unter ui/)
 └── app/           Seiten: / (Rangliste), /produkt/[id], /kalibrierung, /login
