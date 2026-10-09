@@ -77,3 +77,33 @@ describe("scoreTrend", () => {
     expect(result.score).toBeLessThanOrEqual(1);
   });
 });
+
+describe("Saison-Erkennung", () => {
+  // Fenster „today 12-m“ ab Mitte Oktober des Vorjahres: Halloween-Spitze am Anfang, dann flach, jetzt steigend
+  const halloween = [70, 100, 45, 12, 6, 5, ...Array<number>(38).fill(4), 5, 6, 7, 9, 14, 22, 35, 52];
+  // neues Produkt: ein Jahr lang nichts, jetzt Durchbruch
+  const breakout = [...Array<number>(44).fill(3), 5, 7, 9, 12, 20, 35, 60, 100];
+  // Dauerbrenner mit stetigem Wachstum: kein Tief dazwischen
+  const evergreen = Array.from({ length: 52 }, (_, i) => 40 + i);
+
+  it("stuft Halloween (Vorjahresspitze, Tief dazwischen) als Saison ein", () => {
+    const trend = scoreTrend(halloween, config);
+    expect(trend.growth).toBeGreaterThan(0);
+    expect(trend.seasonal).toBe(true);
+  });
+
+  it("stuft Durchbrüche und Dauerbrenner nicht als Saison ein", () => {
+    expect(scoreTrend(breakout, config).seasonal).toBe(false);
+    expect(scoreTrend(evergreen, config).seasonal).toBe(false);
+  });
+
+  it("braucht ein ganzes Jahr – kurze Reihen (TikTok) und fallende Kurven sind nie Saison", () => {
+    expect(scoreTrend(halloween.slice(-20), config).seasonal).toBe(false);
+    expect(scoreTrend([...halloween].reverse(), config).seasonal).toBe(false);
+  });
+
+  it("ändert den Trend-Score nicht, nur die Einstufung", () => {
+    const withoutSeason = scoreTrend(halloween, { ...config, seasonality: { ...config.seasonality, minSeriesWeeks: 999 } });
+    expect(scoreTrend(halloween, config).score).toBe(withoutSeason.score);
+  });
+});

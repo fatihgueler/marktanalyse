@@ -17,6 +17,8 @@ export interface CandidateFilters {
   sort: SortKey;
   /** nur „Neu diese Woche“ (neue und deutlich gestiegene Produkte) */
   onlyNew: boolean;
+  /** Saisonware (z. B. Halloween, Weihnachten) ausblenden */
+  hideSeasonal: boolean;
 }
 
 /** URL-Parameter defensiv lesen – ungültige Werte werden ignoriert statt Fehler zu werfen. */
@@ -30,6 +32,7 @@ export function parseFilters(params: Record<string, string | string[] | undefine
     category: CATEGORY_IDS.includes(kategorie as CategoryId) ? (kategorie as CategoryId) : null,
     sort: SORT_KEYS.includes(sort as SortKey) ? (sort as SortKey) : "score",
     onlyNew: pick("neu") === "1",
+    hideSeasonal: pick("saison") === "0",
   };
 }
 

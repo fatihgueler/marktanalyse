@@ -132,8 +132,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     ? await Promise.all([getCandidates(run.id, filters, hidden), getCategoryCounts(run.id, filters.country, hidden)])
     : [[] as CandidateRow[], new Map<string, number>()];
   for (const check of manualInCountry) categoryCounts.set(check.category, (categoryCounts.get(check.category) ?? 0) + 1);
+  const seasonalGroups = groupCandidates(
+    rows.filter((row) => row.breakdown.trend.seasonal),
+    filters.sort,
+  ).length;
   const allGroups = groupCandidates(
-    rows.map((row) => ({ ...row, slowDelivery: isSlowDelivery(row.breakdown.delivery) })),
+    rows
+      .filter((row) => !(filters.hideSeasonal && row.breakdown.trend.seasonal))
+      .map((row) => ({ ...row, slowDelivery: isSlowDelivery(row.breakdown.delivery) })),
     filters.sort,
   );
 
@@ -192,6 +198,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           sorts={SORT_OPTIONS}
           current={{ country: filters.country, category: filters.category, sort: filters.sort }}
           newToggle={comparison ? { count: moved.length, active: onlyNew } : undefined}
+          seasonToggle={seasonalGroups > 0 || filters.hideSeasonal ? { count: seasonalGroups, active: filters.hideSeasonal } : undefined}
         />
 
         {shownManual.length > 0 ? (

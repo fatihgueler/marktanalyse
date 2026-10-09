@@ -21,6 +21,27 @@ export interface TrendBreakdown {
   score: number;
   /** gesetzt, wenn das Signal als Rauschen verworfen wurde */
   rejectedReason: string | null;
+  /** Steigt nur, weil gerade wieder Saison ist (siehe `trend.seasonality`); fehlt bei älteren Snapshots */
+  seasonal?: boolean;
+}
+
+const ROLLING_WEEKS = 4;
+
+/**
+ * Saisonware erkennen: steigt jetzt, war im gleichen Zeitraum des Vorjahres (Fensteranfang) ähnlich hoch,
+ * und dazwischen lag ein deutliches Tief. Nur bei steigendem Interesse und ausreichend langer Reihe.
+ */
+export function isSeasonal(values: readonly number[], growth: number, config: RadarConfig["trend"] = radarConfig.trend): boolean {
+  const { windowWeeks, minSeriesWeeks, yearAgoMinRatio, troughMaxRatio } = config.seasonality;
+  if (growth <= 0 || values.length < minSeriesWeeks) return false;
+  const recent = mean(values.slice(-config.recentWeeks));
+  const yearAgo = mean(values.slice(0, windowWeeks));
+  const middle = values.slice(windowWeeks, -(config.recentWeeks + config.previousWeeks));
+  if (middle.length < ROLLING_WEEKS) return false;
+  let trough = Infinity;
+  for (let i = 0; i + ROLLING_WEEKS <= middle.length; i++) trough = Math.min(trough, mean(middle.slice(i, i + ROLLING_WEEKS)));
+  const peak = Math.max(...values);
+  return yearAgo >= yearAgoMinRatio * recent && peak > 0 && trough <= troughMaxRatio * peak;
 }
 
 /**
@@ -64,5 +85,6 @@ export function scoreTrend(values: readonly number[], config: RadarConfig["trend
       ? clamp(weights.growth * growthComponent + weights.early * earlyComponent + weights.level * levelComponent, 0, 1)
       : 0;
 
-  return { recent, previous, baseline, growth, growthComponent, earlyComponent, levelComponent, weights, score, rejectedReason };
+  const seasonal = rejectedReason === null && isSeasonal(values, growth, config);
+  return { recent, previous, baseline, growth, growthComponent, earlyComponent, levelComponent, weights, score, rejectedReason, seasonal };
 }

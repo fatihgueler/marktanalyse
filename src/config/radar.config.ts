@@ -418,6 +418,24 @@ export const radarConfig = {
   trend: {
     recentWeeks: 4,
     previousWeeks: 4,
+    /**
+     * Saison-Erkennung im 12-Monats-Fenster („today 12-m“, 52 Wochen): Die ersten Wochen des Fensters
+     * liegen ein Jahr vor den kommenden Wochen – also im gleichen Zeitraum des Vorjahres.
+     * „Saison“ heißt: Es steigt jetzt, war vor einem Jahr zur gleichen Zeit ähnlich hoch, und dazwischen
+     * lag ein deutliches Tief (z. B. Halloween, Weihnachtsdeko, Planschbecken).
+     * ANNAHME: Die Vorjahresspanne ist um bis zu `windowWeeks` Wochen in die Zukunft verschoben – für
+     * Saisonware vor dem Höhepunkt ist das genau der Vorjahres-Höhepunkt.
+     */
+    seasonality: {
+      /** Wochen am Fensteranfang = Vorjahreszeitraum */
+      windowWeeks: 6,
+      /** Kürzere Reihen (z. B. TikTok, ~17 Wochen) lassen keinen Vorjahresvergleich zu */
+      minSeriesWeeks: 48,
+      /** Vorjahreszeitraum mindestens so hoch: Anteil am heutigen Niveau */
+      yearAgoMinRatio: 0.5,
+      /** Tiefster 4-Wochen-Schnitt dazwischen höchstens dieser Anteil vom Jahreshöchstwert */
+      troughMaxRatio: 0.35,
+    },
     /** Untergrenze des Nenners beim Wachstum (verhindert Explosion bei previous ≈ 0) */
     growthFloor: 5,
     /** Wachstum, bei dem G = 0,5 erreicht (1.0 = Verdopplung) */

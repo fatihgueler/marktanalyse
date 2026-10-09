@@ -32,6 +32,7 @@ export function makeTestConfig(): RadarConfig {
   config.trend = {
     recentWeeks: 4,
     previousWeeks: 4,
+    seasonality: { windowWeeks: 6, minSeriesWeeks: 48, yearAgoMinRatio: 0.5, troughMaxRatio: 0.35 },
     growthFloor: 5,
     growthHalfSaturation: 1,
     earlyBaselineCap: 30,

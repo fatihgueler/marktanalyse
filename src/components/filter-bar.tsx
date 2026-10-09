@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { CalendarOff, LoaderCircle, Sparkles } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
@@ -22,10 +22,12 @@ interface FilterBarProps {
   current: { country: string | null; category: string | null; sort: string };
   /** Schalter „Neu diese Woche“; fehlt, solange es keinen Vergleichslauf gibt */
   newToggle?: { count: number; active: boolean };
+  /** Schalter „Saisonware ausblenden“; fehlt, wenn der Lauf keine Saisonware enthält */
+  seasonToggle?: { count: number; active: boolean };
 }
 
 /** Filter liegen in der URL: teilbar, Zurück-Taste funktioniert, Server rendert die gefilterte Liste. */
-export function FilterBar({ countries, categories, sorts, current, newToggle }: FilterBarProps) {
+export function FilterBar({ countries, categories, sorts, current, newToggle, seasonToggle }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -116,6 +118,22 @@ export function FilterBar({ countries, categories, sorts, current, newToggle }: 
           <Sparkles className="size-4" aria-hidden="true" />
           Neu diese Woche
           <span className={cn("rounded-full px-1.5 text-xs tabular", newToggle.active ? "bg-primary-foreground/20" : "bg-muted")}>{newToggle.count}</span>
+        </button>
+      ) : null}
+
+      {seasonToggle ? (
+        <button
+          type="button"
+          aria-pressed={seasonToggle.active}
+          onClick={() => navigate("saison", seasonToggle.active ? ALL : "0")}
+          className={cn(
+            "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors",
+            seasonToggle.active ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-accent",
+          )}
+        >
+          <CalendarOff className="size-4" aria-hidden="true" />
+          Saisonware ausblenden
+          <span className={cn("rounded-full px-1.5 text-xs tabular", seasonToggle.active ? "bg-primary-foreground/20" : "bg-muted")}>{seasonToggle.count}</span>
         </button>
       ) : null}
 

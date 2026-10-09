@@ -80,3 +80,14 @@ describe("trendPhase", () => {
     expect(trendPhase(scoreTrend(weeks(1, 1, 2), config.trend), config)).toBe("Rauschen");
   });
 });
+
+describe("trendPhase mit Saison", () => {
+  it("meldet „Saison“ statt „Frühphase“, wenn die Kurve als Saisonware erkannt wurde", async () => {
+    const { scoreTrend } = await import("./trend");
+    const { trendPhase } = await import("./product-check");
+    const { makeTestConfig } = await import("./test-config");
+    const config = makeTestConfig();
+    const halloween = [70, 100, 45, 12, 6, 5, ...Array<number>(38).fill(4), 5, 6, 7, 9, 14, 22, 35, 52];
+    expect(trendPhase(scoreTrend(halloween, config.trend), config)).toBe("Saison");
+  });
+});

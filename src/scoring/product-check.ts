@@ -4,7 +4,7 @@ import type { TrendBreakdown } from "./trend";
 
 export type CheckVerdict = "Lohnt sich" | "Knapp" | "Finger weg";
 export type Sourcing = "einzeln" | "grosshandel";
-export type TrendPhase = "Frühphase" | "Wachstum" | "Kein Anstieg" | "Rauschen";
+export type TrendPhase = "Frühphase" | "Wachstum" | "Saison" | "Kein Anstieg" | "Rauschen";
 
 export interface ProductCheckInput {
   country: Country;
@@ -109,5 +109,6 @@ export function checkProduct(input: ProductCheckInput, config: RadarConfig = rad
 export function trendPhase(trend: TrendBreakdown, config: RadarConfig = radarConfig): TrendPhase {
   if (trend.rejectedReason) return "Rauschen";
   if (trend.growth <= 0) return "Kein Anstieg";
+  if (trend.seasonal) return "Saison";
   return trend.earlyComponent >= config.productCheck.earlyPhaseMin ? "Frühphase" : "Wachstum";
 }
