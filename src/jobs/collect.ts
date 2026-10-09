@@ -28,18 +28,13 @@ import { quotaDecision } from "@/sources/budget";
 import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
+import { countCards, formatFunnel, printMessages, printTopCandidates, type RunMessage } from "./run-report";
 import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
 
 loadDotenv({ quiet: true });
 
-interface RunError {
-  /** Warnungen (z. B. Token läuft bald ab) machen einen Lauf nicht PARTIAL */
-  level?: "fehler" | "warnung";
-  source: string;
-  country?: Country;
-  keyword?: string;
-  message: string;
-}
+/** Warnungen (z. B. Token läuft bald ab) machen einen Lauf nicht PARTIAL */
+type RunError = RunMessage;
 
 interface RunContext {
   db: PrismaClient;
@@ -50,7 +45,7 @@ interface RunContext {
   fx: FxInfo;
   judge: MatchJudge;
   errors: RunError[];
-  stats: { keywords: number; qualified: number; offers: number; candidates: number };
+  stats: { discovered: number; keywords: number; qualified: number; offers: number; candidates: number };
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
@@ -159,6 +154,7 @@ async function collectDemand(ctx: RunContext, source: TrendSource, country: Coun
     return [];
   }
   const keywords = discovered.slice(0, radarConfig.demand.maxKeywordsPerCountry);
+  ctx.stats.discovered += keywords.length;
   ctx.stats.keywords += keywords.length;
 
   const results = await mapWithConcurrency(keywords, radarConfig.collect.concurrency, async ({ keyword, seedTerm }) => {
@@ -498,23 +494,6 @@ async function collectCountry(ctx: RunContext, country: Country): Promise<void> 
 
 // ── Hauptablauf ──────────────────────────────────────────────────────────
 
-async function printTopCandidates(db: PrismaClient, runId: string): Promise<void> {
-  const top = await db.candidateSnapshot.findMany({
-    where: { runId, belowMinMargin: false },
-    orderBy: { totalScore: "desc" },
-    take: 10,
-    include: { product: { select: { title: true } } },
-  });
-  if (top.length === 0) return;
-  console.log("\nTop 10 Kandidaten:");
-  for (const [i, c] of top.entries()) {
-    const title = c.product.title.length > 48 ? `${c.product.title.slice(0, 47)}…` : c.product.title;
-    console.log(
-      `${String(i + 1).padStart(2)}. ${c.totalScore.toFixed(1).padStart(5)}  ${c.country}  ${title.padEnd(48)}  Marge ${Number(c.marginAbs).toFixed(2)} ${c.currency} (${(c.marginPct * 100).toFixed(0)} %)`,
-    );
-  }
-}
-
 async function main(): Promise<number> {
   const liveFlag = process.argv.includes("--live");
   validateConfig();
@@ -606,7 +585,7 @@ async function main(): Promise<number> {
     fx,
     judge,
     errors: [...warnings],
-    stats: { keywords: 0, qualified: 0, offers: 0, candidates: 0 },
+    stats: { discovered: 0, keywords: 0, qualified: 0, offers: 0, candidates: 0 },
   };
 
   let status: "SUCCEEDED" | "PARTIAL" | "FAILED" = "SUCCEEDED";
@@ -632,16 +611,10 @@ async function main(): Promise<number> {
     data: { status, finishedAt: new Date(), errors: ctx.errors.length > 0 ? asJson(ctx.errors) : undefined },
   });
 
-  const { keywords, qualified, offers, candidates } = ctx.stats;
   if (sources.serpApiBudget) console.log(`  SerpApi-Budget: ${sources.serpApiBudget.consumed} von ${sources.serpApiBudget.limit} Suchen verbraucht`);
   console.log(`\nLauf ${run.id}: ${status}`);
-  console.log(`  ${keywords} Keywords, ${qualified} mit Trend-Dynamik, ${offers} Angebote, ${candidates} Kandidaten`);
-  if (ctx.errors.length > 0) {
-    console.log(`  ${ctx.errors.length} Meldungen:`);
-    for (const e of ctx.errors.slice(0, 10)) {
-      console.log(`    - ${e.level === "warnung" ? "Warnung " : ""}[${e.source}${e.country ? `/${e.country}` : ""}${e.keyword ? ` „${e.keyword}“` : ""}] ${e.message}`);
-    }
-  }
+  console.log(`  Trichter: ${formatFunnel(ctx.stats, await countCards(db, run.id))}`);
+  printMessages(ctx.errors);
   await printTopCandidates(db, run.id);
   await db.$disconnect();
   return status === "FAILED" ? 1 : 0;

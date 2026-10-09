@@ -56,4 +56,6 @@ export interface CandidateBreakdown {
   delivery?: DeliveryEstimate;
   /** Wechselkurse des Laufs; fehlt bei älteren Snapshots (dort feste Kurse) */
   fx?: { source: "ezb" | "config"; date: string | null };
+  /** Übersetzter Titel und Produkt-Suchbegriff (Claude); fehlt bei älteren Snapshots und ohne Claude */
+  offer?: { titleDe: string | null; productQuery: string | null };
 }
