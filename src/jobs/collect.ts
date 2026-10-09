@@ -28,6 +28,7 @@ import { mixedModeWarnings, unusableLiveRunReason } from "@/sources/readiness";
 import { fetchSerpApiAccount } from "@/sources/serpapi-account";
 import { createSources, describeModes, type SourceSet } from "@/sources/registry";
 import { countCards, formatFunnel, printMessages, printTopCandidates, type RunMessage } from "./run-report";
+import { parseRunOptions, type RunOptions } from "./run-options";
 import { printDroppedOffers, scoreKeyword, type DroppedOffers } from "./keyword-scoring";
 import { createTitleTranslator, type OfferTitleTranslator } from "@/matching/title-translator";
 import type { AdRecord, DemandRecord, PriceRecord, SupplyRecord, SupplySource, TrendSource } from "@/sources/types";
@@ -397,6 +398,13 @@ async function collectCountry(ctx: RunContext, country: Country, countriesLeft: 
 
 async function main(): Promise<number> {
   const liveFlag = process.argv.includes("--live");
+  let options: RunOptions;
+  try {
+    options = parseRunOptions(process.argv);
+  } catch (error) {
+    console.error(errorMessage(error));
+    return 2;
+  }
   validateConfig();
   const env = readCollectEnv();
   const sources = createSources(env, new Date(), createDbTokenStore());
@@ -429,6 +437,13 @@ async function main(): Promise<number> {
     }
     console.log("\nKostenpflichtige Aufrufe in diesem Lauf (Obergrenze laut Config):");
     for (const line of liveCosts) console.log(`  • ${line}`);
+    if (options.maxSearches !== null || options.countries !== null) {
+      const parts = [
+        options.countries ? `nur ${options.countries.join(", ")}` : null,
+        options.maxSearches !== null ? `SerpApi höchstens ${options.maxSearches} Suchen` : null,
+      ].filter(Boolean);
+      console.log(`  Probelauf: ${parts.join(", ")} – die Obergrenzen oben sinken entsprechend.`);
+    }
     if (!liveFlag) {
       console.error("\nAbbruch: Mindestens eine Quelle läuft live. Zum Bestätigen mit `npm run collect -- --live` starten.");
       return 2;
@@ -457,6 +472,11 @@ async function main(): Promise<number> {
     } catch (error) {
       console.warn(`  SerpApi-Kontostand nicht abrufbar (${errorMessage(error)}) – Lauf nutzt das Budget laut Config.`);
     }
+  }
+
+  if (options.maxSearches !== null && sources.serpApiBudget) {
+    sources.serpApiBudget.capTo(options.maxSearches);
+    console.log(`  SerpApi: Probelauf – Budget auf ${sources.serpApiBudget.limit} Suchen begrenzt.`);
   }
 
   const warnings: RunError[] = mixedModeWarnings(modes).map((message) => ({ level: "warnung", source: "betrieb", message }));
@@ -496,8 +516,10 @@ async function main(): Promise<number> {
   try {
     // Länder, in die keine Angebotsquelle liefert (CH/GB ohne AliExpress), bekämen nie Kandidaten –
     // ihre Trend-Suchen wären verschenkt.
-    const served = COUNTRIES.filter((c) => sources.supply.some((s) => !s.countries || s.countries.includes(c)));
-    for (const country of COUNTRIES.filter((c) => !served.includes(c))) {
+    const selected = options.countries ?? COUNTRIES;
+    if (options.countries) console.log(`  Probelauf: nur ${selected.join(", ")}`);
+    const served = selected.filter((c) => sources.supply.some((s) => !s.countries || s.countries.includes(c)));
+    for (const country of selected.filter((c) => !served.includes(c))) {
       const message = `${country} übersprungen: keine Angebotsquelle liefert dorthin (AliExpress-Keys fehlen) – spart die Trend-Suchen.`;
       console.log(`  ${message}`);
       ctx.errors.push({ level: "warnung", source: "betrieb", country, message });
