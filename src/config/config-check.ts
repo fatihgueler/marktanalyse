@@ -71,9 +71,9 @@ export function minimumSerpApiSearches(config: RadarConfig = radarConfig): numbe
 
 /** Höchstbetrag Apify je Lauf laut Config (alle Kostengrenzen ausgeschöpft). */
 export function worstCaseApifyUsd(config: RadarConfig = radarConfig): number {
-  const { tiktokHashtags, alibaba1688 } = config.scraping;
+  const { tiktokTopAds, alibaba1688 } = config.scraping;
   return (
-    tiktokHashtags.countries.length * tiktokHashtags.maxChargeUsd +
+    tiktokTopAds.countries.length * tiktokTopAds.maxChargeUsd +
     config.wholesale.countries.length * alibaba1688.maxSearchesPerCountry * alibaba1688.maxChargeUsd
   );
 }

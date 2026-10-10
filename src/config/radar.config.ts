@@ -111,16 +111,34 @@ export const radarConfig = {
      * Seed-Begriffe für die Suche nach steigenden Keywords („rising related queries“).
      * Konkrete Produktkategorien statt Sammelbegriffen: „gadget“, „led“, „deko“ und „geschenkidee“ lieferten
      * im ersten Live-Lauf vor allem Marken, Saisonware und Bastelideen. Freigegeben am 09.10.2026.
+     * Seit 09.10.2026 ein größerer Vorrat je Land: Jeder Lauf nimmt `maxSeedsPerCountry` davon, rotierend
+     * nach Kalenderwoche (siehe `rotateSeeds`), sodass nach wenigen Wochen alle Kategorien abgefragt sind.
      * CH und GB laufen nur, wenn eine Angebotsquelle dorthin liefert (heute nur AliExpress).
      */
     seeds: {
-      DE: ["nachtlicht", "luftbefeuchter", "schreibtisch organizer", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung", "gesichtsroller"],
-      AT: ["nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung"],
-      CH: ["nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung"],
-      GB: ["night light", "humidifier", "desk organiser", "massage gun", "mini projector", "phone holder", "kitchen storage", "face roller"],
+      DE: [
+        "nachtlicht", "luftbefeuchter", "schreibtisch organizer", "massagegerät", "mini projektor", "handyhalterung",
+        "küche aufbewahrung", "gesichtsroller", "heizdecke", "handwärmer", "katzenspielzeug", "hundezubehör",
+        "auto zubehör", "reisezubehör", "badezimmer organizer", "küchenhelfer", "kabelloser staubsauger", "wärmekissen",
+        "fitness zubehör", "haarstyler", "kinderspielzeug", "wandleuchte", "kleiderschrank organizer", "pflanzenlampe",
+      ],
+      AT: [
+        "nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung",
+        "heizdecke", "handwärmer", "katzenspielzeug", "hundezubehör", "küchenhelfer", "badezimmer organizer",
+      ],
+      CH: [
+        "nachtlicht", "luftbefeuchter", "massagegerät", "mini projektor", "handyhalterung", "küche aufbewahrung",
+        "heizdecke", "handwärmer", "katzenspielzeug", "hundezubehör", "küchenhelfer", "badezimmer organizer",
+      ],
+      GB: [
+        "night light", "humidifier", "desk organiser", "massage gun", "mini projector", "phone holder",
+        "kitchen storage", "face roller", "heated blanket", "hand warmer", "cat toys", "dog accessories",
+        "car accessories", "travel accessories", "bathroom organiser", "kitchen gadgets", "cordless vacuum", "heat pad",
+        "fitness accessories", "hair styler", "kids toys", "wall light", "wardrobe organiser", "grow light",
+      ],
     } satisfies Record<Country, string[]>,
     /** Kostenkontrolle SerpApi: je Seed 1 Request, je Keyword 1 Request */
-    maxSeedsPerCountry: 8,
+    maxSeedsPerCountry: 10,
     /** 45 × 4 Länder = 180 Trendkurven je Lauf – passt mit Entdeckung und Preisabfragen ins SerpApi-Budget */
     maxKeywordsPerCountry: 45,
     /** Zeitraum der Zeitreihe (SerpApi `date`) */
@@ -519,6 +537,29 @@ export const radarConfig = {
       /** Heuristik: Anteil des Hashtags, der aus bekannten Produktwörtern bestehen muss */
       minCoverage: 0.8,
     },
+    /**
+     * TikTok Creative Center – Top-Anzeigen (ersetzt seit 10/2026 die Trend-Hashtags als Live-Quelle:
+     * Der Hashtag-Actor lieferte ohne Login nur ~3 Hashtags je Land). Beworbene Produkte mit Shop-Link
+     * zeigen, was gerade auf TikTok verkauft wird; Claude macht daraus Suchbegriffe, die Trendkurve
+     * kommt von Google Trends (eine SerpApi-Suche je Begriff).
+     */
+    tiktokTopAds: {
+      actorId: "datapeak~tiktok-creative-center",
+      /** Creative Center führt DE und GB; AT/CH sind dort keine eigenen Märkte */
+      countries: ["DE", "GB"] as Country[],
+      /** Zeitraum der Top-Anzeigen in Tagen (7, 30 oder 180) */
+      periodDays: 30,
+      /** Anzeigen je Land (bestimmt die Kosten) */
+      adsPerCountry: 100,
+      /** harte Kostengrenze je Land und Lauf in USD; 100 Anzeigen ≈ 0,15–0,23 $ (Testlauf 10/2026: 19 Anzeigen = 0,043 $) */
+      maxChargeUsd: 0.3,
+      /** ANNAHME: Preis laut Actor-Seite, nur für die Kostenschätzung vor Live-Läufen */
+      usdPerThousandResults: 2.3,
+      /** Höchstens so viele Suchbegriffe aus TikTok-Anzeigen je Land bekommen eine Trendkurve (SerpApi) */
+      maxKeywordsPerCountry: 20,
+      /** Nur Anzeigen mit Shop-Link (Produktseite) – Markenkampagnen ohne Kaufziel sind kein Drop-Kandidat */
+      requireLandingPage: true,
+    },
     alibaba1688: {
       /** Abrechnung pro Ergebnis, keine Monatsmiete – passt ins Gratis-Guthaben von Apify */
       actorId: "memo23~1688-wholesale-scraper",
@@ -582,8 +623,8 @@ export const radarConfig = {
      * ANNAHME: Darunter reicht es nach der Keyword-Suche (Seeds) kaum noch für Kurven und Preise.
      */
     serpApiMinSearchesPerRun: 100,
-    /** Apify-Gratis-Plan: 5 $ Guthaben pro Monat */
-    apifyMonthlyUsd: 5,
+    /** Apify-Gratis-Plan: Guthaben pro Monat (laut Konto 10 $, Stand 10/2026) */
+    apifyMonthlyUsd: 10,
   },
 
   /**
