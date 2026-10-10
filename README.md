@@ -54,7 +54,7 @@ Noch keine lokale Datenbank? Mit Docker zum Beispiel so:
 | `npm run collect` | Ein kompletter Datenlauf (Snapshot). Mit echten Keys: `npm run collect -- --live` |
 | `npm run collect -- --live --countries=DE --max-searches=100` | Kleiner Probelauf: nur die genannten Länder (`DE,AT,CH,GB`) und höchstens so viele SerpApi-Suchen. Senkt das Budget laut Config nur, erhöht es nie. Der Lauf erscheint wie ein normaler Lauf im Dashboard. |
 | `npm run rescore -- --run <id>` | Nachbewertung eines gespeicherten Laufs mit den aktuellen Filtern und Regeln, **ohne** neue SerpApi- oder Apify-Abfragen (siehe [Nachbewertung](#nachbewertung-eines-laufs)). Mit Claude-Key: `-- --run <id> --live` |
-| `npm run check` | Verbindungstest: prüft jeden gesetzten Key kostenlos (SerpApi-Kontingent, Apify-Guthaben, Ablauf des Meta-Tokens …). Mit `-- --probe` zusätzlich je eine echte Abfrage der kostenpflichtigen Quellen (3 SerpApi-Suchen, höchstens ~0,25 $ Apify). |
+| `npm run check` | Verbindungstest: prüft jeden gesetzten Key kostenlos (SerpApi-Kontingent, Apify-Guthaben, Ablauf des Meta-Tokens …). Mit `-- --probe` zusätzlich je eine echte Abfrage der kostenpflichtigen Quellen (3 SerpApi-Suchen, höchstens ~0,35 $ Apify). |
 | `npm test` | Unit-Tests (Scoring, Marge, Wettbewerb, Matching, Signatur) |
 | `npm run db:migrate` | Migrationen lokal anwenden/erstellen |
 | `npm run db:deploy` | Migrationen in Produktion anwenden |
@@ -149,19 +149,19 @@ Weil viele offizielle APIs nicht zu bekommen sind, bindet der Radar zwei Quellen
 
 | Quelle | Rolle | Länder | Apify-Actor (Config `scraping.*.actorId`) |
 |---|---|---|---|
-| TikTok Creative Center, Trend-Hashtags | Trendquelle: Hashtag-Popularität der letzten 120 Tage | DE, GB | `memo23~tiktok-trending-hashtags-scraper` |
+| TikTok Creative Center, Top-Anzeigen | Trendquelle: Produkte, die gerade mit Shop-Link beworben werden (letzte 30 Tage) | DE, GB | `datapeak~tiktok-creative-center` |
 | 1688.com Produktsuche | Einkaufsquelle mit Großhandels-Kalkulation | DE, AT (Lager in DE) | `memo23~1688-wholesale-scraper` |
 
 **So funktioniert es**
 - Das Scraping führt der Datendienst **Apify** aus. Es gibt keine eigenen Scraper und keinen Code, der Bot-Schutz umgeht. Aufruf über die Apify-REST-API, keine zusätzliche Abhängigkeit.
-- **TikTok:** Viele Trend-Hashtags sind keine Produkte (#fyp, #fußball). Claude wählt die Produkt-Hashtags aus und macht daraus einen Suchbegriff (#cloudlamp → „cloud lamp“). Ohne Claude übernimmt eine Heuristik. Die Popularitätskurve wird zu Wochenwerten verdichtet und wie Google Trends bewertet. Liefern Google und TikTok dasselbe Keyword, wird es nur einmal verarbeitet.
+- **TikTok (seit 10/2026 Top-Anzeigen statt Hashtags):** Der frühere Hashtag-Actor lieferte ohne Login nur rund 3 Hashtags je Land. Jetzt holt der Radar je Land bis zu 100 Top-Anzeigen der letzten 30 Tage und behält nur die mit Shop-Link (Produktseite). Claude macht aus Anzeigentext und Shop-Pfad einen Suchbegriff („Foundation stick … | foundation-stick“ → „foundation stick“); ohne Claude gibt es keine TikTok-Keywords. Die Trendkurve kommt von Google Trends (eine SerpApi-Suche je Begriff, höchstens `scraping.tiktokTopAds.maxKeywordsPerCountry` = 20 je Land), damit alle Keywords nach derselben Regel bewertet werden. TikTok läuft vor Google Trends; Google bekommt den Rest des SerpApi-Anteils. Liefern Google und TikTok dasselbe Keyword, wird es nur einmal verarbeitet.
 - **1688:** Claude übersetzt das Keyword ins Chinesische; ohne `ANTHROPIC_API_KEY` wird 1688 im Live-Modus übersprungen. Die Marge rechnet mit **Großhandel**: Staffelpreis bei der Losgröße (Config `wholesale.lotSize`, mindestens die Mindestbestellmenge), Agentengebühr, Luftfracht nach Gewicht, regulärer Zoll (die Sammelsendung liegt über 150 €), EUSt bei Einfuhr nach DE, anteilige Verzollung und Versand vom Lager an den Kunden. Alle Werte stehen in `radar.config.ts` unter `wholesale`.
 - In der Rangliste erscheint dasselbe Produkt pro Land nur einmal, auch wenn es über mehrere Keywords gefunden wurde.
 
 **Kosten**
 - Jeder Actor-Lauf hat eine **harte Kostengrenze** (`maxTotalChargeUsd`, Config `scraping.*.maxChargeUsd`). Es gibt **keine automatischen Wiederholungen**, weil jeder Versuch kostet.
 - Beide Actors rechnen **pro Ergebnis** ab, ohne Monatsmiete: TikTok ca. 1,50 $ je 1.000 Hashtags, 1688 ab 2 $ je 1.000 Angebote. Der 1688-Actor braucht Residential-Proxys, deren Datenverbrauch zusätzlich vom Guthaben abgeht.
-- **Gratis-Plan von Apify:** 5 $ Guthaben pro Monat. Ein wöchentlicher Lauf kostet grob 0,30 $ (TikTok, 2 Länder) plus ca. 0,24 $ (1688, 24 Suchen × 5 Angebote), also etwa 2–3 $ im Monat. Die Obergrenzen je Lauf sind so gesetzt, dass selbst der ungünstigste Fall (1,12 $ je Lauf) unter 5 $ im Monat bleibt. Im Gratis-Plan kann ohnehin nichts nachberechnet werden; ist das Guthaben leer, schlagen die Läufe fehl. Nächster Plan: Starter für 19 $/Monat.
+- **Gratis-Plan von Apify:** laut Konto 10 $ Guthaben pro Monat (`budget.apifyMonthlyUsd`). Ein wöchentlicher Lauf kostet grob 0,45 $ (TikTok-Top-Anzeigen, 2 Länder × 100 Anzeigen) plus ca. 0,24 $ (1688, 24 Suchen × 5 Angebote), also etwa 3 $ im Monat. Die Obergrenzen je Lauf sind so gesetzt, dass selbst der ungünstigste Fall (1,32 $ je Lauf) unter dem Monatsguthaben bleibt. Im Gratis-Plan kann ohnehin nichts nachberechnet werden; ist das Guthaben leer, schlagen die Läufe fehl. Nächster Plan: Starter für 19 $/Monat.
 - Der `--live`-Schutz gilt auch hier: `npm run collect` zeigt vor dem Start die geschätzten Kosten.
 
 **Risiken, die ihr bewusst tragt**
@@ -200,7 +200,7 @@ Wichtige Stellschrauben:
 - `tax.vatMode`: `"kleinunternehmer"` (Standard) oder `"regelbesteuert"`. Beim Wechsel in die Regelbesteuerung wird die Einfuhrumsatzsteuer als Vorsteuer abgezogen und die USt aus dem Verkaufspreis herausgerechnet.
 - `score.weights`, `trend.weights`, `competition.weights`: Gewichtung der Komponenten
 - `margin.*`: Mindest- und Zielmarge, Mindest-Rohertrag je Stück
-- `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden – seit 09.10.2026 konkrete Produktkategorien (Nachtlicht, Luftbefeuchter, Massagegerät …) statt „gadget“, „led“, „deko“
+- `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden – seit 09.10.2026 konkrete Produktkategorien (Nachtlicht, Luftbefeuchter, Massagegerät …) statt „gadget“, „led“, „deko“. Der Vorrat ist größer als `demand.maxSeedsPerCountry` (10); jeder Lauf nimmt 10 davon, rotierend nach Kalenderwoche, sodass DE und GB (24 Begriffe) nach drei Wochen komplett abgefragt sind.
 - `keywordFilter`: Marken/Händler, Fragewörter, Selbermachen, Tests/Vergleiche, Filme/Spiele, Lizenzware (auch chinesisch)
 - `trend.seasonality`: Schwellen der Saison-Erkennung
 - `referencePrice.minLookupsPerCountry` / `maxLookupsPerCountry`: reservierte bzw. höchstens mögliche Shopping-Preise je Land
