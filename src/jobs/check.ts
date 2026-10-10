@@ -182,12 +182,14 @@ async function checkApify(token: string | undefined): Promise<Outcome> {
 async function probe(env: CollectEnv): Promise<[string, Outcome][]> {
   const results: [string, Outcome][] = [];
   if (env.SERPAPI_API_KEY) {
-    const budget = new SearchBudget("SerpApi-Probe", 3);
+    const budget = new SearchBudget("SerpApi-Probe", 2);
     const trends = new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY, budget);
     results.push([
       "Google Trends",
       await attempt(async () => {
-        const keywords = await trends.discoverKeywords(["lampe"], "DE");
+        // Eigene Grenze von 1 Suche: sonst holte die Entdeckung auch Kategorien und Trending Now aus dem Probe-Budget.
+        const discovery = new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY!, new SearchBudget("SerpApi-Probe-Entdeckung", 1));
+        const keywords = await discovery.discoverKeywords(["lampe"], "DE");
         const first = keywords[0];
         if (!first) return { status: "hinweis", detail: "Abfrage ok, aber keine steigenden Suchbegriffe zu „lampe“" };
         const series = await trends.fetchSeries(first.keyword, first.seedTerm, "DE");
