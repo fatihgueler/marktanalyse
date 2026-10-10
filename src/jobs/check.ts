@@ -35,7 +35,7 @@ import { GoogleShoppingSerpApiSource } from "@/sources/price/google-shopping.ser
 import { mixedModeWarnings } from "@/sources/readiness";
 import { createSources, describeModes } from "@/sources/registry";
 import { Alibaba1688ApifySource } from "@/sources/scraping/alibaba-1688";
-import { TikTokHashtagsApifySource } from "@/sources/scraping/tiktok-hashtags";
+import { TikTokTopAdsApifySource } from "@/sources/scraping/tiktok-top-ads";
 import { deliveryWords } from "@/scoring/ranking";
 import { AliExpressSource } from "@/sources/supply/aliexpress";
 
@@ -166,8 +166,8 @@ async function checkApify(token: string | undefined): Promise<Outcome> {
   if (!token) return { status: "aus", detail: "APIFY_TOKEN fehlt → TikTok-Trends und 1688 sind Demo-Daten" };
   const headers = { Authorization: `Bearer ${token}` };
   const limits = apifyLimitsSchema.parse(await fetchJson<unknown>("https://api.apify.com/v2/users/me/limits", { headers }));
-  const { tiktokHashtags, alibaba1688 } = radarConfig.scraping;
-  for (const actorId of [tiktokHashtags.actorId, alibaba1688.actorId]) {
+  const { tiktokTopAds, alibaba1688 } = radarConfig.scraping;
+  for (const actorId of [tiktokTopAds.actorId, alibaba1688.actorId]) {
     await fetchJson<unknown>(`https://api.apify.com/v2/acts/${actorId}`, { headers });
   }
   const used = limits.data.current.monthlyUsageUsd ?? 0;
@@ -208,8 +208,13 @@ async function probe(env: CollectEnv): Promise<[string, Outcome][]> {
     results.push([
       "TikTok-Trends",
       await attempt(async () => {
-        const keywords = await new TikTokHashtagsApifySource(env.APIFY_TOKEN!, createHashtagClassifier(env)).discoverKeywords([], "DE");
-        return { status: keywords.length > 0 ? "ok" : "hinweis", detail: `${keywords.length} Produkt-Hashtags erkannt${keywords[0] ? `, z. B. „${keywords[0].keyword}“` : ""}` };
+        // Nur die Entdeckung prüfen: Kurven würden SerpApi-Suchen kosten, deshalb eine Platzhalter-Quelle.
+        const noSeries = { id: "probe", label: "probe", mode: "live" as const, discoverKeywords: async () => [], fetchSeries: async () => null };
+        const keywords = await new TikTokTopAdsApifySource(env.APIFY_TOKEN!, createHashtagClassifier(env), noSeries).discoverKeywords([], "DE");
+        return {
+          status: keywords.length > 0 ? "ok" : "hinweis",
+          detail: `${keywords.length} Produkte aus Top-Anzeigen erkannt${keywords[0] ? `, z. B. „${keywords[0].keyword}“` : ""}`,
+        };
       }),
     ]);
     results.push([

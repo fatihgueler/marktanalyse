@@ -13,6 +13,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { getDb } from "@/lib/db";
 import { readCollectEnv } from "@/lib/env";
+import { rotateSeeds } from "@/lib/seed-rotation";
 import { round } from "@/lib/stats";
 import { createKeywordClassifier, type KeywordProductClassifier } from "@/matching/keyword-classifier";
 import { gateKeywords, type KeywordGateResult } from "@/matching/keyword-gate";
@@ -86,9 +87,12 @@ function estimateLiveRequests(modes: Record<string, string>): string[] {
   }
   const scraping = radarConfig.scraping;
   if (modes["tiktok-trends"] === "live") {
-    const runs = scraping.tiktokHashtags.countries.length;
-    const usd = Math.min(scraping.tiktokHashtags.maxChargeUsd, (scraping.tiktokHashtags.hashtagsPerCountry / 1000) * scraping.tiktokHashtags.usdPerThousandResults);
-    lines.push(`Apify TikTok Creative Center (Scraping): ${runs} Läufe, je höchstens ${usd.toFixed(2)} $ (hart begrenzt auf ${scraping.tiktokHashtags.maxChargeUsd} $)`);
+    const ads = scraping.tiktokTopAds;
+    const usd = Math.min(ads.maxChargeUsd, (ads.adsPerCountry / 1000) * ads.usdPerThousandResults);
+    lines.push(
+      `Apify TikTok Creative Center, Top-Anzeigen (Scraping): ${ads.countries.length} Läufe, je höchstens ${usd.toFixed(2)} $ (hart begrenzt auf ${ads.maxChargeUsd} $); ` +
+        `Trendkurven dazu aus dem SerpApi-Budget (höchstens ${ads.maxKeywordsPerCountry} je Land)`,
+    );
   }
   if (modes["alibaba-1688"] === "live") {
     const searches = radarConfig.wholesale.countries.length * Math.min(maxKeywordsPerCountry, scraping.alibaba1688.maxSearchesPerCountry);
@@ -131,7 +135,7 @@ function logKeywordGate(sourceId: string, country: Country, found: number, gate:
 }
 
 async function collectDemand(ctx: RunContext, source: TrendSource, country: Country): Promise<ScoredDemand[]> {
-  const seeds = radarConfig.demand.seeds[country].slice(0, radarConfig.demand.maxSeedsPerCountry);
+  const seeds = rotateSeeds(radarConfig.demand.seeds[country], radarConfig.demand.maxSeedsPerCountry, new Date());
   let discovered;
   try {
     discovered = await source.discoverKeywords(seeds, country);
@@ -152,7 +156,7 @@ async function collectDemand(ctx: RunContext, source: TrendSource, country: Coun
   const kept = new Set(gate.kept);
   // Google Trends: höchstens so viele Kurven, wie der SerpApi-Anteil des Landes noch hergibt
   const budget = source.usesSerpApiBudget ? ctx.sources.serpApiBudget : null;
-  const limit = Math.min(radarConfig.demand.maxKeywordsPerCountry, budget ? budget.available : Infinity);
+  const limit = Math.min(radarConfig.demand.maxKeywordsPerCountry, source.maxKeywordsPerCountry ?? Infinity, budget ? budget.available : Infinity);
   const keywords = discovered.filter((d) => kept.has(d.keyword)).slice(0, limit);
   ctx.stats.discovered += discovered.length;
   ctx.stats.keywords += keywords.length;
