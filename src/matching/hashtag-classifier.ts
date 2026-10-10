@@ -13,11 +13,16 @@ export interface HashtagVerdict {
 }
 
 /** Woher die Trendbegriffe stammen – bestimmt die Beispiele im Prompt */
-export type TrendTermOrigin = "tiktok" | "pinterest";
+export type TrendTermOrigin = "tiktok" | "pinterest" | "tiktok-ad";
 
 const ORIGIN_TEXT: Record<TrendTermOrigin, { noun: string; examples: string; format: (term: string) => string }> = {
   tiktok: { noun: "TikTok-Trend-Hashtag", examples: "#cloudlamp, #minithermalprinter", format: (term) => `#${term}` },
   pinterest: { noun: "Pinterest-Trend-Suchbegriff", examples: "„wolkenlampe“, „led spiegel bad“", format: (term) => term },
+  "tiktok-ad": {
+    noun: "Text einer TikTok-Werbeanzeige (Anzeigentext | Pfad der Shop-Seite)",
+    examples: "„Galaxy Projector für dein Zimmer | galaxy-star-projector“, „Foundation Stick deckt alles ab | foundation-stick“",
+    format: (term) => term,
+  },
 };
 
 export interface HashtagClassifier {
@@ -84,6 +89,8 @@ export class HeuristicHashtagClassifier implements HashtagClassifier {
 
   async classify(hashtags: string[], _country?: Country, origin: TrendTermOrigin = "tiktok"): Promise<HashtagVerdict[]> {
     const { minCoverage } = this.config.scraping.tiktokHashtags;
+    // Anzeigentexte sind Fließtext – ohne Claude lässt sich daraus kein verlässlicher Suchbegriff bilden.
+    if (origin === "tiktok-ad") return hashtags.map((hashtag) => ({ hashtag, keyword: null }));
     return hashtags.map((hashtag) => {
       const { words, coverage } = segmentHashtag(hashtag, this.vocabulary);
       if (coverage < minCoverage || words.length === 0) return { hashtag, keyword: null };
@@ -129,9 +136,12 @@ export class ClaudeHashtagClassifier implements HashtagClassifier {
     if (response.stop_reason === "refusal" || !response.parsed_output) {
       throw new Error("Claude konnte die Hashtags nicht klassifizieren.");
     }
-    const byTag = new Map(response.parsed_output.hashtags.map((h) => [h.hashtag.replace(/^#/, "").toLowerCase(), h]));
-    return hashtags.map((hashtag) => {
-      const verdict = byTag.get(hashtag.toLowerCase());
+    const answers = response.parsed_output.hashtags;
+    const byTag = new Map(answers.map((h) => [h.hashtag.replace(/^#/, "").toLowerCase(), h]));
+    // Längere Texte (Anzeigen) gibt Claude nicht immer zeichengenau zurück – dann gilt die Reihenfolge.
+    const sameOrder = answers.length === hashtags.length;
+    return hashtags.map((hashtag, index) => {
+      const verdict = byTag.get(hashtag.replace(/^#/, "").toLowerCase()) ?? (sameOrder ? answers[index] : undefined);
       const keyword = verdict?.is_product ? verdict.search_keyword.trim().toLowerCase() : "";
       return { hashtag, keyword: keyword || null };
     });
