@@ -201,6 +201,7 @@ Wichtige Stellschrauben:
 - `score.weights`, `trend.weights`, `competition.weights`: Gewichtung der Komponenten
 - `margin.*`: Mindest- und Zielmarge, Mindest-Rohertrag je Stück
 - `demand.seeds`: Suchbegriffe je Land, rund um die steigende Keywords gesucht werden – seit 09.10.2026 konkrete Produktkategorien (Nachtlicht, Luftbefeuchter, Massagegerät …) statt „gadget“, „led“, „deko“. Der Vorrat ist größer als `demand.maxSeedsPerCountry` (10); jeder Lauf nimmt 10 davon, rotierend nach Kalenderwoche, sodass DE und GB (24 Begriffe) nach drei Wochen komplett abgefragt sind.
+- `demand.discoveryCategories` / `maxCategoriesPerCountry`: Entdeckung **ohne Startbegriff** – steigende Suchanfragen ganzer Google-Trends-Kategorien (Shopping, Haus & Garten, Schönheit & Fitness, Unterhaltungselektronik, Haustiere, Spielzeug, Geschenke, Hobby). Je Lauf 4 davon, rotierend; je Kategorie 1 SerpApi-Suche. Dazu `demand.trendingNow`: Google „Trending Now“ der letzten 7 Tage in der Kategorie Shopping (1 Suche je Land). Beides liefert viel Rauschen (Gutscheincodes, Marken, Filme); das fängt der Keyword-Filter (Liste `keywordFilter.dealsAccounts` plus Claude).
 - `keywordFilter`: Marken/Händler, Fragewörter, Selbermachen, Tests/Vergleiche, Filme/Spiele, Lizenzware (auch chinesisch)
 - `trend.seasonality`: Schwellen der Saison-Erkennung
 - `referencePrice.minLookupsPerCountry` / `maxLookupsPerCountry`: reservierte bzw. höchstens mögliche Shopping-Preise je Land
