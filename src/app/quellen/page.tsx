@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Quellen · Trend-Radar" };
 const SOURCES: { id: string; role: string; vars: string; cost: string; required?: boolean }[] = [
   { id: "google-trends", role: "Trends", vars: "SERPAPI_API_KEY", cost: "25 $/Monat, zusammen mit Google Shopping", required: true },
   { id: "pinterest-trends", role: "Trends", vars: "PINTEREST_APP_ID, PINTEREST_APP_SECRET, dann unten verbinden", cost: "kostenlos" },
-  { id: "tiktok-trends", role: "Trends (Scraping)", vars: "APIFY_TOKEN", cost: "Apify-Gratisguthaben" },
+  { id: "tiktok-trends", role: "Trends: beworbene Produkte (Scraping)", vars: "APIFY_TOKEN und ANTHROPIC_API_KEY", cost: "Apify-Gratisguthaben + SerpApi-Kurven" },
   { id: "aliexpress", role: "Einkauf", vars: "ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_TRACKING_ID", cost: "kostenlos", required: true },
   { id: "alibaba-1688", role: "Einkauf (Scraping)", vars: "APIFY_TOKEN und ANTHROPIC_API_KEY", cost: "Apify-Gratisguthaben" },
   { id: "google-shopping", role: "Verkaufspreis", vars: "SERPAPI_API_KEY", cost: "in SerpApi enthalten", required: true },
