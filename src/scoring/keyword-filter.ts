@@ -35,7 +35,7 @@ export function licenseHit(text: string, config: FilterConfig = radarConfig.keyw
 
 /**
  * Regelbasierter Keyword-Filter (kostenlos, vor Claude): Marken/Händler, Fragen, Selbermachen,
- * Tests/Vergleiche, Filme/Spiele und Lizenzware. Der Grund steht im Log.
+ * Tests/Vergleiche, Gutscheine/Konten/Läden, Filme/Spiele und Lizenzware. Der Grund steht im Log.
  */
 export function ruleCheckKeyword(keyword: string, config: FilterConfig = radarConfig.keywordFilter): RuleVerdict {
   const firstWord = normalize(keyword).trim().split(" ")[0] ?? "";
@@ -45,6 +45,7 @@ export function ruleCheckKeyword(keyword: string, config: FilterConfig = radarCo
     [config.brands, "Marke/Händler"],
     [config.diy, "Selbermachen/Ideen"],
     [config.reviewCompare, "Test/Vergleich"],
+    [config.dealsAccounts, "Gutschein/Konto/Laden"],
     [config.media, "Film/Serie/Spiel"],
   ];
   for (const [terms, label] of checks) {

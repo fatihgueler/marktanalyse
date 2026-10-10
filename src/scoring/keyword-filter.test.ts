@@ -29,6 +29,14 @@ describe("ruleCheckKeyword", () => {
     expect(ruleCheckKeyword("stranger things staffel 5")).toMatchObject({ ok: false });
   });
 
+  it("verwirft Gutscheine, Konten und Läden aus den Kategorie-Abfragen (Test 10/2026)", () => {
+    expect(ruleCheckKeyword("nordvpn coupon code")).toMatchObject({ ok: false, reason: expect.stringContaining("Gutschein/Konto/Laden") });
+    expect(ruleCheckKeyword("saily login")).toMatchObject({ ok: false });
+    expect(ruleCheckKeyword("hollister promo code")).toMatchObject({ ok: false });
+    expect(ruleCheckKeyword("sonnenfinsternis brille")).toEqual({ ok: true });
+    expect(ruleCheckKeyword("stiefel")).toEqual({ ok: true });
+  });
+
   it("vergleicht ganze Wörter, nicht Wortteile", () => {
     expect(ruleCheckKeyword("testosteron")).toEqual({ ok: true });
     expect(ruleCheckKeyword("depotfett")).toEqual({ ok: true });
