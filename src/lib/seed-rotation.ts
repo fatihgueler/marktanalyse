@@ -5,7 +5,7 @@ import { isoWeekNumber } from "./weeks";
  * Fenster um `count` weiter (zyklisch), sodass nach ⌈Vorrat ÷ count⌉ Wochen jede Kategorie einmal
  * abgefragt wurde. Ist der Vorrat nicht größer als `count`, kommen alle Seeds dran.
  */
-export function rotateSeeds(pool: readonly string[], count: number, now: Date): string[] {
+export function rotateSeeds<T>(pool: readonly T[], count: number, now: Date): T[] {
   if (count <= 0 || pool.length === 0) return [];
   if (pool.length <= count) return [...pool];
   const week = now.getUTCFullYear() * 53 + isoWeekNumber(now);
