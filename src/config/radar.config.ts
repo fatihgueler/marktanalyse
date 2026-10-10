@@ -139,6 +139,30 @@ export const radarConfig = {
     } satisfies Record<Country, string[]>,
     /** Kostenkontrolle SerpApi: je Seed 1 Request, je Keyword 1 Request */
     maxSeedsPerCountry: 10,
+    /**
+     * Entdeckung OHNE Startbegriff: steigende Suchanfragen einer ganzen Google-Trends-Kategorie (q leer, nur `cat`).
+     * Getestet 10.10.2026 mit Shopping (18) in DE: liefert echte Produkte („sonnenfinsternis brille“ +3.250 %,
+     * „stiefel“), aber auch Gutscheine, Marken und Filme – die fängt der Keyword-Filter (Regeln + Claude).
+     * Je Lauf `maxCategoriesPerCountry` davon, rotierend nach Kalenderwoche. Je Kategorie 1 SerpApi-Suche.
+     * IDs laut Google-Trends-Kategorienliste; nur 18 ist live geprüft.
+     */
+    discoveryCategories: [
+      { id: 18, label: "Shopping" },
+      { id: 11, label: "Haus & Garten" },
+      { id: 44, label: "Schönheit & Fitness" },
+      { id: 78, label: "Unterhaltungselektronik" },
+      { id: 66, label: "Haustiere" },
+      { id: 432, label: "Spielzeug" },
+      { id: 70, label: "Geschenke & Anlässe" },
+      { id: 65, label: "Hobby & Freizeit" },
+    ],
+    maxCategoriesPerCountry: 4,
+    /**
+     * Google „Trending Now“ (Tagestrends der letzten 7 Tage) in der Kategorie Shopping: 1 SerpApi-Suche je Land.
+     * Getestet 10.10.2026 (DE): überwiegend Promis, Autos und Läden, vereinzelt Produkte („happy ears ohrstöpsel“,
+     * „pullover“) – der Keyword-Filter sortiert den Rest aus. `false` schaltet die Abfrage ab.
+     */
+    trendingNow: { enabled: true, categoryId: 16, hours: 168 },
     /** 45 × 4 Länder = 180 Trendkurven je Lauf – passt mit Entdeckung und Preisabfragen ins SerpApi-Budget */
     maxKeywordsPerCountry: 45,
     /** Zeitraum der Zeitreihe (SerpApi `date`) */
@@ -166,6 +190,12 @@ export const radarConfig = {
     diy: ["basteln", "selber machen", "selbst machen", "selbermachen", "ideen", "idee", "diy", "anleitung", "tutorial", "vorlage", "ausmalbild", "craft", "crafts", "ideas", "template", "printable"],
     /** Tests, Vergleiche und Bestenlisten */
     reviewCompare: ["test", "testsieger", "vergleich", "erfahrungen", "bewertung", "review", "reviews", "vs", "versus", "compare", "comparison", "best", "beste", "bester", "bestes", "stiftung warentest", "worth it"],
+    /** Gutscheine, Konten, Läden und Aktionen – typisches Rauschen der Kategorie-Abfragen ohne Startbegriff */
+    dealsAccounts: [
+      "coupon", "coupons", "gutschein", "gutscheine", "gutscheincode", "rabattcode", "rabatt code", "promo code", "promocode", "discount code",
+      "voucher", "code", "login", "anmelden", "kundenservice", "öffnungszeiten", "filiale", "prospekt", "black friday", "cyber monday",
+      "sale", "angebote", "preisvergleich", "kündigen", "aktie",
+    ],
     /** Filme, Serien, Spiele, Musik, Rätsel */
     media: [
       "film", "movie", "kinofilm", "serie", "series", "staffel", "episode", "trailer", "netflix", "crossword", "kreuzworträtsel", "lyrics", "songtext",

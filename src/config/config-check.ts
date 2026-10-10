@@ -53,7 +53,10 @@ export function validateConfig(config: RadarConfig = radarConfig): void {
 
 function seedSearches(config: RadarConfig): { seeds: number; countries: number } {
   const countries = Object.keys(config.countries) as (keyof RadarConfig["countries"])[];
-  const seeds = countries.reduce((sum, c) => sum + Math.min(config.demand.seeds[c].length, config.demand.maxSeedsPerCountry), 0);
+  // Entdeckung je Land: Seeds + Kategorie-Abfragen ohne Startbegriff + ggf. eine „Trending Now“-Abfrage
+  const perCountryExtra =
+    Math.min(config.demand.discoveryCategories.length, config.demand.maxCategoriesPerCountry) + (config.demand.trendingNow.enabled ? 1 : 0);
+  const seeds = countries.reduce((sum, c) => sum + Math.min(config.demand.seeds[c].length, config.demand.maxSeedsPerCountry) + perCountryExtra, 0);
   return { seeds, countries: countries.length };
 }
 
