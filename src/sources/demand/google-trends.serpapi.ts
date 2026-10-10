@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { radarConfig, type Country } from "@/config/radar.config";
+import { rotateSeeds } from "@/lib/seed-rotation";
 import { isoDate } from "@/lib/weeks";
 import type { SearchBudget } from "../budget";
 import { Throttle, fetchJson } from "../http";
@@ -14,6 +15,10 @@ const relatedQueriesSchema = z.object({
       rising: z.array(z.object({ query: z.string(), value: z.union([z.string(), z.number()]).optional() })).optional(),
     })
     .optional(),
+});
+
+const trendingNowSchema = z.object({
+  trending_searches: z.array(z.object({ query: z.string(), increase_percentage: z.number().nullish() })).optional(),
 });
 
 const timeseriesSchema = z.object({
@@ -49,29 +54,50 @@ export class GoogleTrendsSerpApiSource implements TrendSource {
     return `${SERPAPI_URL}?${search.toString()}`;
   }
 
-  async discoverKeywords(seeds: string[], country: Country): Promise<DiscoveredKeyword[]> {
+  /**
+   * Steigende Suchanfragen finden – drei Wege, jeder kostet je Abfrage eine SerpApi-Suche:
+   * 1. rund um die Seeds (Startbegriffe),
+   * 2. je Google-Trends-Kategorie OHNE Startbegriff (`demand.discoveryCategories`, rotierend),
+   * 3. Google „Trending Now“ in der Kategorie Shopping (`demand.trendingNow`).
+   * Ist das Budget erschöpft, geht es mit den bisher gefundenen Keywords weiter statt abzubrechen.
+   */
+  async discoverKeywords(seeds: string[], country: Country, now: Date = new Date()): Promise<DiscoveredKeyword[]> {
     const profile = radarConfig.countries[country];
+    const { discoveryCategories, maxCategoriesPerCountry, trendingNow, discoveryTimeframe } = radarConfig.demand;
     const found = new Map<string, DiscoveredKeyword>();
-    for (const seed of seeds) {
-      // Budget erschöpft: mit den bisher gefundenen Keywords weiterarbeiten statt abzubrechen
-      if (!this.budget.tryTake()) break;
+    const add = (query: string, seedTerm: string, signal: string) => {
+      const keyword = query.trim().toLowerCase();
+      if (keyword && !found.has(keyword)) found.set(keyword, { keyword, seedTerm, signal });
+    };
+    const relatedRising = async (params: Record<string, string>, seedTerm: string) => {
       const json = await fetchJson<unknown>(
-        this.url({
-          q: seed,
-          geo: profile.serpGeo,
-          hl: profile.serpLanguage,
-          data_type: "RELATED_QUERIES",
-          date: radarConfig.demand.discoveryTimeframe,
-        }),
+        this.url({ geo: profile.serpGeo, hl: profile.serpLanguage, data_type: "RELATED_QUERIES", date: discoveryTimeframe, ...params }),
         {},
         this.throttle,
       );
-      const parsed = relatedQueriesSchema.parse(json);
-      for (const item of parsed.related_queries?.rising ?? []) {
-        const keyword = item.query.trim().toLowerCase();
-        if (!found.has(keyword)) {
-          found.set(keyword, { keyword, seedTerm: seed, signal: String(item.value ?? "") });
-        }
+      for (const item of relatedQueriesSchema.parse(json).related_queries?.rising ?? []) add(item.query, seedTerm, String(item.value ?? ""));
+    };
+
+    for (const seed of seeds) {
+      if (!this.budget.tryTake()) return [...found.values()];
+      await relatedRising({ q: seed }, seed);
+    }
+    for (const category of rotateSeeds(discoveryCategories, maxCategoriesPerCountry, now)) {
+      if (!this.budget.tryTake()) return [...found.values()];
+      await relatedRising({ cat: String(category.id) }, `Kategorie ${category.label}`);
+    }
+    if (trendingNow.enabled && this.budget.tryTake()) {
+      const search = new URLSearchParams({
+        engine: "google_trends_trending_now",
+        api_key: this.apiKey,
+        geo: profile.serpGeo,
+        hl: profile.serpLanguage,
+        hours: String(trendingNow.hours),
+        category_id: String(trendingNow.categoryId),
+      });
+      const json = await fetchJson<unknown>(`${SERPAPI_URL}?${search.toString()}`, {}, this.throttle);
+      for (const item of trendingNowSchema.parse(json).trending_searches ?? []) {
+        add(item.query, "Google Trending Now (Shopping)", item.increase_percentage ? `+${item.increase_percentage} %` : "Trending");
       }
     }
     return [...found.values()];
