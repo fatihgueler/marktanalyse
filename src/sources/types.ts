@@ -62,6 +62,8 @@ export interface DemandRecord extends SourceRecord {
 export interface TrendSource extends SourceBase {
   /** true = jede Zeitreihe kostet eine Suche aus dem SerpApi-Budget (Google Trends) */
   readonly usesSerpApiBudget?: boolean;
+  /** Höchstens so viele Keywords je Land (zusätzlich zu demand.maxKeywordsPerCountry); leer = keine eigene Grenze */
+  readonly maxKeywordsPerCountry?: number;
   /** Neue, steigende Keywords rund um die Seeds finden. */
   discoverKeywords(seeds: string[], country: Country): Promise<DiscoveredKeyword[]>;
   /** Zeitreihe für ein Keyword laden (einzeln, damit die 0..100-Normierung nur vom Keyword selbst abhängt). */

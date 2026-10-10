@@ -44,10 +44,10 @@ describe("Kostenrahmen der Config", () => {
   });
 
   it("rechnet den SerpApi-Verbrauch nach (Handrechnung)", () => {
-    // Seeds: DE 8 + AT 6 + CH 6 + GB 8 = 28; reservierte Preise 4 × 8 = 32
-    expect(minimumSerpApiSearches(radarConfig)).toBe(60);
-    // ohne Budgetgrenze: 28 + 4 × (45 Kurven + 45 Preise) – die harte Grenze von 230 greift vorher
-    expect(worstCaseSerpApiSearches(radarConfig)).toBe(388);
+    // Seeds: je Land 10 aus dem Vorrat = 40; reservierte Preise 4 × 8 = 32
+    expect(minimumSerpApiSearches(radarConfig)).toBe(72);
+    // ohne Budgetgrenze: 40 Seeds (4 × 10) + 4 × (45 Kurven + 45 Preise) – die harte Grenze von 230 greift vorher
+    expect(worstCaseSerpApiSearches(radarConfig)).toBe(400);
   });
 
   it("lehnt eine Config ab, die das SerpApi-Budget sprengen kann", () => {

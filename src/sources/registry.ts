@@ -3,7 +3,7 @@
  * live oder im Mock-Modus laufen. Der Mock-Modus greift automatisch, sobald ein Key fehlt.
  *
  * Werbebibliotheken (Meta, TikTok) implementieren `AdSignalSource`.
- * Phase 2b: TikTok Creative Center (`TrendSource`) und 1688 (`SupplySource`) laufen über den
+ * Phase 2b: TikTok Creative Center (`TrendSource`, seit 10/2026 Top-Anzeigen statt Hashtags) und 1688 (`SupplySource`) laufen über den
  * Scraping-Dienst Apify (APIFY_TOKEN) – bewusste Entscheidung des Auftraggebers, siehe PLAN-PHASE2.md §9.
  * Kostenlose Zusatzquelle: Pinterest Trends (`TrendSource`).
  */
@@ -17,7 +17,7 @@ import { createHashtagClassifier } from "@/matching/hashtag-classifier";
 import { ClaudeKeywordTranslator } from "@/matching/keyword-translator";
 import { Alibaba1688ApifySource } from "./scraping/alibaba-1688";
 import { Alibaba1688MockSource } from "./scraping/alibaba-1688.mock";
-import { TikTokHashtagsApifySource } from "./scraping/tiktok-hashtags";
+import { TikTokTopAdsApifySource } from "./scraping/tiktok-top-ads";
 import { TikTokHashtagsMockSource } from "./scraping/tiktok-hashtags.mock";
 import { GoogleTrendsMockSource } from "./demand/google-trends.mock";
 import { GoogleTrendsSerpApiSource } from "./demand/google-trends.serpapi";
@@ -63,9 +63,12 @@ export function createSources(env: CollectEnv, now: Date = new Date(), tokenStor
         tokenStore,
       )
     : null;
+  const googleTrends = env.SERPAPI_API_KEY && serpApiBudget ? new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY, serpApiBudget) : null;
+  // TikTok zuerst: beworbene Produkte sind das stärkere Signal und auf `tiktokTopAds.maxKeywordsPerCountry`
+  // Kurven je Land begrenzt; Google Trends bekommt den Rest des SerpApi-Anteils.
   const trend: TrendSource[] = [
-    env.SERPAPI_API_KEY && serpApiBudget ? new GoogleTrendsSerpApiSource(env.SERPAPI_API_KEY, serpApiBudget) : new GoogleTrendsMockSource(now),
-    env.APIFY_TOKEN ? new TikTokHashtagsApifySource(env.APIFY_TOKEN, hashtagClassifier) : new TikTokHashtagsMockSource(hashtagClassifier, now),
+    env.APIFY_TOKEN ? new TikTokTopAdsApifySource(env.APIFY_TOKEN, hashtagClassifier, googleTrends) : new TikTokHashtagsMockSource(hashtagClassifier, now),
+    googleTrends ?? new GoogleTrendsMockSource(now),
     pinterestAuth ? new PinterestTrendsSource(pinterestAuth, hashtagClassifier) : new PinterestTrendsMockSource(hashtagClassifier, now),
   ];
 
