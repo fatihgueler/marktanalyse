@@ -29,7 +29,8 @@ export function judgeLabel(judge: string): string {
 /** Was die Trendkurve einer Quelle misst – für Überschriften und Screenreader-Texte. */
 export function demandMetric(source: string): { label: string; note: string } {
   if (source === "tiktok-trends") {
-    return { label: "TikTok-Popularität", note: "TikTok Creative Center (Scraping), Hashtag-Popularität, 100 = Höchstwert im Zeitraum" };
+    // Seit 10/2026: Produkt aus TikTok-Top-Anzeigen, Kurve von Google Trends (Demo-Daten: Hashtag-Popularität)
+    return { label: "Suchinteresse (Produkt aus TikTok-Anzeige)", note: "Google Trends zu einem Produkt, das im TikTok Creative Center beworben wird; 100 = Höchstwert im Zeitraum" };
   }
   if (source === "pinterest-trends") {
     return { label: "Pinterest-Suchinteresse", note: "Pinterest Trends, relatives Suchvolumen (100 = Höchstwert im Zeitraum)" };
