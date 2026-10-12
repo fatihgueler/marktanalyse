@@ -100,7 +100,15 @@ export class TikTokTopAdsApifySource implements TrendSource {
     const items = await runApifyActor(
       this.token,
       config.actorId,
-      { mode: "topAds", region: country, period: config.periodDays, maxItems: config.adsPerCountry, fetchAdDetails: true },
+      {
+        mode: "topAds",
+        region: country,
+        // Der Actor erwartet den Zeitraum als Text („30“) – eine Zahl lehnt er mit HTTP 400 ab (Lauf vom 12.10.2026).
+        period: String(config.periodDays),
+        maxItems: config.adsPerCountry,
+        fetchAdDetails: true,
+        ...(config.objective ? { objective: config.objective } : {}),
+      },
       { maxItems: config.adsPerCountry, maxChargeUsd: config.maxChargeUsd, throttle: this.throttle },
     );
     const ads = parseTopAds(items);
