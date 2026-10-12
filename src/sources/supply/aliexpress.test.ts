@@ -83,4 +83,28 @@ describe("AliExpressSource.search", () => {
     expect(shippingCall.get("sign")).toMatch(/^[0-9A-F]{64}$/);
     expect(bodies).toHaveLength(2);
   });
+  it("wartet bei ApiCallLimit kurz und versucht die Versandabfrage erneut (Lauf vom 12.10.2026)", async () => {
+    vi.useFakeTimers();
+    const responses = [
+      {
+        aliexpress_affiliate_product_query_response: {
+          resp_result: { resp_code: 200, result: { total_record_count: 1, products: { product: [product("1")] } } },
+        },
+      },
+      { error_response: { code: "ApiCallLimit", msg: "Api access frequency exceeds the limit. this ban will last 1 seconds" } },
+      shippingResponse({ shipping_fee: "2.00", min_delivery_days: "7", max_delivery_days: "12", ship_from_country: "CN" }),
+    ];
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(responses.shift()), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const pending = new AliExpressSource({ appKey: "k", appSecret: "s", trackingId: "t" }, 1).search("heizdecke", "DE", 12);
+      await vi.runAllTimersAsync();
+      const offers = await pending;
+      expect(offers[0]?.shippingCost).toBe(2);
+      expect(offers[0]?.shippingError).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

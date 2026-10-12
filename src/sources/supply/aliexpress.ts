@@ -8,6 +8,9 @@ const GATEWAY_URL = "https://api-sg.aliexpress.com/sync";
 const METHOD = "aliexpress.affiliate.product.query";
 /** Versandkosten und Lieferzeit je Angebot (kostenlos); braucht SKU-ID und Steuersatz aus der Produktsuche */
 const SHIPPING_METHOD = "aliexpress.affiliate.product.shipping.get";
+/** Kurze Sperre bei ApiCallLimit laut AliExpress „1 seconds“ – etwas länger warten, höchstens zweimal */
+const RATE_LIMIT_WAIT_MS = 1_500;
+const RATE_LIMIT_RETRIES = 2;
 /** Maximum der API je Seite */
 const MAX_PAGE_SIZE = 50;
 
@@ -154,6 +157,22 @@ export class AliExpressSource implements SupplySource {
     );
   }
 
+  /**
+   * AliExpress sperrt bei zu vielen Aufrufen kurz („ApiCallLimit … this ban will last 1 seconds“, Lauf vom
+   * 12.10.2026). Dann einmal kurz warten und erneut versuchen, statt auf die Versandpauschale auszuweichen.
+   */
+  private async withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt >= RATE_LIMIT_RETRIES || !message.includes("ApiCallLimit")) throw error;
+        await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_WAIT_MS * (attempt + 1)));
+      }
+    }
+  }
+
   /** Versandkosten und Lieferzeit für ein Angebot aus der Produktsuche. */
   async shippingQuote(product: AliExpressProduct, shipTo: Country): Promise<ShippingQuote | null> {
     if (!product.sku_id || product.tax_rate === undefined) throw new Error("Produktsuche lieferte keine SKU-ID oder keinen Steuersatz");
@@ -184,10 +203,13 @@ export class AliExpressSource implements SupplySource {
       ship_to_country: profile.aliexpressShipTo,
       tracking_id: this.credentials.trackingId,
     };
-    const parsed = responseSchema.parse(await this.call(METHOD, params));
-    if (parsed.error_response) {
-      throw new Error(`AliExpress-Fehler ${parsed.error_response.code}: ${parsed.error_response.msg ?? "unbekannt"}`);
-    }
+    const parsed = await this.withRateLimitRetry(async () => {
+      const response = responseSchema.parse(await this.call(METHOD, params));
+      if (response.error_response) {
+        throw new Error(`AliExpress-Fehler ${response.error_response.code}: ${response.error_response.msg ?? "unbekannt"}`);
+      }
+      return response;
+    });
     const result = parsed.aliexpress_affiliate_product_query_response?.resp_result;
     if (!result) throw new Error("AliExpress: unerwartete Antwortstruktur");
     // resp_code 405 = keine Treffer
@@ -203,7 +225,7 @@ export class AliExpressSource implements SupplySource {
     const failures = new Map<string, string>();
     for (const product of shown.slice(0, this.shippingLookups)) {
       try {
-        quotes.set(product.product_id, await this.shippingQuote(product, shipTo));
+        quotes.set(product.product_id, await this.withRateLimitRetry(() => this.shippingQuote(product, shipTo)));
       } catch (error) {
         failures.set(product.product_id, error instanceof Error ? error.message : String(error));
       }
