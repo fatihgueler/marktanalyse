@@ -182,7 +182,7 @@ export const radarConfig = {
       "ikea", "lidl", "aldi", "dunelm", "m&s", "marks and spencer", "philips hue", "leroy merlin", "jysk", "tchibo", "kik", "primark",
       "temu", "shein", "amazon", "obi", "bauhaus", "hornbach", "depot", "xxxlutz", "rossmann", "h&m", "zara", "argos", "b&m",
       "the range", "tesco", "asda", "sainsbury", "wilko", "home bargains", "kmart", "walmart", "costco", "apple", "samsung", "dyson",
-      "govee", "nanoleaf", "lego", "loberon", "pagro",
+      "govee", "nanoleaf", "lego", "loberon", "pagro", "iphone", "galaxus",
     ],
     /** Fragen – nur als erstes Wort */
     questionWords: ["how", "what", "why", "where", "when", "which", "who", "wie", "was", "warum", "wo", "wann", "welche", "welcher", "welches", "wer"],
@@ -589,6 +589,8 @@ export const radarConfig = {
       maxKeywordsPerCountry: 20,
       /** Nur Anzeigen mit Shop-Link (Produktseite) – Markenkampagnen ohne Kaufziel sind kein Drop-Kandidat */
       requireLandingPage: true,
+      /** TikTok-Kampagnenziel „Conversions“ (ID 3): Anzeigen, die verkaufen wollen; leer = alle Ziele */
+      objective: "3",
     },
     alibaba1688: {
       /** Abrechnung pro Ergebnis, keine Monatsmiete – passt ins Gratis-Guthaben von Apify */
